@@ -1,3 +1,8 @@
+# This file contains tests for the Starlark re module.
+# All tests where taken from CPython.
+# See also https://github.com/python/cpython/blob/main/Lib/test/test_re.py
+
+
 # Re test suite and benchmark suite v1.5
 
 # The 3 possible outcomes for each pattern

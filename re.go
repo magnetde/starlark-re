@@ -605,7 +605,7 @@ func reEscape(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwar
 		return nil, err
 	}
 
-	escaped := escape(pattern.value)
+	escaped := escapePattern(pattern.value)
 	return pattern.asType(escaped), nil
 }
 

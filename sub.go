@@ -233,7 +233,7 @@ func parseTemplate(r *regexp.Regexp, template string, isString bool) ([]template
 
 			addIndex(index)
 		default:
-			if escape, ok := unescape(c); ok {
+			if escape, ok := unescapeLetter(c); ok {
 				addLiteral(escape)
 			} else {
 				if isASCIILetter(c) {
