@@ -129,7 +129,7 @@ func parseEscape(s string, isStr, ascii, isCls bool) (string, string, error) {
 			return "", "", fmt.Errorf(`bad escape \%c%s`, c, e)
 		}
 
-		return escapeRune(r, true), s[size:], nil
+		return hexEscape(r, true), s[size:], nil
 	case 'N':
 		// named unicode escape e.g. \N{EM DASH}
 
@@ -154,14 +154,14 @@ func parseEscape(s string, isStr, ascii, isCls bool) (string, string, error) {
 			return "", "", fmt.Errorf("undefined character name '%s'", name)
 		}
 
-		return escapeRune(r, true), rest, nil
+		return hexEscape(r, true), rest, nil
 	case '0':
 		// octal escape
 
 		e := nextOct(s, 2)
 		r := parseIntRune(e, 8)
 
-		return escapeRune(r, isStr), s[len(e):], nil
+		return hexEscape(r, isStr), s[len(e):], nil
 	case '1', '2', '3', '4', '5', '6', '7', '8', '9':
 		// octal escape *or* decimal group reference (only if not in class)
 
@@ -177,7 +177,7 @@ func parseEscape(s string, isStr, ascii, isCls bool) (string, string, error) {
 						return "", "", fmt.Errorf(`octal escape value \%s outside of range 0-0o377`, string(c)+s[:2])
 					}
 
-					return escapeRune(rune(value), isStr), s[2:], nil
+					return hexEscape(rune(value), isStr), s[2:], nil
 				}
 
 				value = 10*value + digit(s[0])
@@ -199,7 +199,7 @@ func parseEscape(s string, isStr, ascii, isCls bool) (string, string, error) {
 			return "", "", fmt.Errorf(`octal escape value \%s outside of range 0-0o377`, string(c)+s[:2])
 		}
 
-		return escapeRune(r, isStr), s[len(e):], nil
+		return hexEscape(r, isStr), s[len(e):], nil
 	default:
 		// All other cases
 
@@ -287,7 +287,7 @@ func nextFunc(s string, n int, fn func(r rune) bool) string {
 }
 
 // TODO: is `isStr` necessary? "\xc2" is probably equivalent with "\x{00c2}".
-func escapeRune(r rune, isStr bool) string {
+func hexEscape(r rune, isStr bool) string {
 	l := utf8.RuneLen(r)
 
 	var b strings.Builder
@@ -375,10 +375,10 @@ func getRanges(s string, isStr bool) (string, error) {
 	for i := 0; i < len(re.Rune); i += 2 {
 		lo, hi := re.Rune[i], re.Rune[i+1]
 
-		b.WriteString(escapeRune(lo, isStr))
+		b.WriteString(hexEscape(lo, isStr))
 		if lo != hi {
 			b.WriteByte('-')
-			b.WriteString(escapeRune(hi, isStr))
+			b.WriteString(hexEscape(hi, isStr))
 		}
 	}
 
