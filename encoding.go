@@ -86,17 +86,26 @@ func isIdentifier(name string) bool {
 		return false
 	}
 
-	for i, c := range name {
+	for i := 0; i < len(name); i++ {
+		c := name[i]
 		if c > unicode.MaxASCII {
 			return false
 		}
 
-		b := byte(c)
-		if !isASCIILetter(b) && b != '_' && (i == 0 || !isDigit(b)) {
+		if !isASCIILetter(c) && c != '_' && (i == 0 || !isDigit(c)) {
 			return false
 		}
 	}
 
+	return true
+}
+
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] > unicode.MaxASCII {
+			return false
+		}
+	}
 	return true
 }
 

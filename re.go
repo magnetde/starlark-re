@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"math/bits"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -408,11 +407,7 @@ func regexpFullmatch(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Valu
 		return nil, err
 	}
 
-	// create a copy to get the longest match
-	r := p.re.Copy()
-	r.Longest()
-
-	match := findMatch(r, str.value, pos)
+	match := findLongestMatch(p.re, str.value, pos)
 	if match == nil || len(match) < 2 {
 		return starlark.None, nil
 	}
@@ -630,11 +625,9 @@ func compilePattern(b *starlark.Builtin, p patternParam, flags int) (*Pattern, e
 
 // Pattern is a starlark representation of a compiled regular expression.
 type Pattern struct {
-	re      *regexp.Regexp
+	re      regexEngine
 	pattern strOrBytes
-
-	pflags int // flags, that where passed to the compile function
-	rflags int // flags, that where determined from the regex string; is determined when the `.flag` field is accessed
+	flags   int
 
 	groupDict map[string]int
 }
@@ -645,10 +638,12 @@ func newPattern(pattern strOrBytes, flags int) (*Pattern, error) {
 	isStr := pattern.isString
 
 	// replace unicode patterns, that are supported by Pathon but not supported by Go
-	p, err := replacePatterns(p, isStr, flags&reFlagASCII != 0)
+	p, err := preprocessRegex(p, isStr, flags&reFlagASCII != 0)
 	if err != nil {
 		return nil, err
 	}
+
+	flags |= parseFlags(p) // TODO
 
 	// check for incompatible flags
 	if isStr {
@@ -691,7 +686,7 @@ func newPattern(pattern strOrBytes, flags int) (*Pattern, error) {
 		p = b.String()
 	}
 
-	re, err := regexp.Compile(p)
+	re, err := compileRegex(p)
 	if err != nil {
 		if e, ok := strings.CutPrefix(err.Error(), "error parsing regexp: "); ok {
 			err = errors.New(e)
@@ -723,8 +718,7 @@ func newPattern(pattern strOrBytes, flags int) (*Pattern, error) {
 	o := Pattern{
 		re:        re,
 		pattern:   pattern,
-		pflags:    flags,
-		rflags:    -1, // initialize when necessary
+		flags:     flags,
 		groupDict: groups,
 	}
 
@@ -772,9 +766,7 @@ var flagnames = []string{
 }
 
 func (p *Pattern) writeflags(b *strings.Builder) {
-	p.ensureRflags()
-
-	flags := p.pflags | p.rflags
+	flags := p.flags
 
 	// Omit re.UNICODE for valid string patterns.
 	if p.pattern.isString && flags&(reFlagLocale|reFlagUnicode|reFlagASCII) == reFlagUnicode {
@@ -814,12 +806,6 @@ func (p *Pattern) writeflags(b *strings.Builder) {
 	}
 }
 
-func (p *Pattern) ensureRflags() {
-	if p.rflags < 0 {
-		p.rflags = parseFlags(p.pattern.value)
-	}
-}
-
 func (p *Pattern) Type() string          { return "pattern" }
 func (p *Pattern) Freeze()               {}
 func (p *Pattern) Truth() starlark.Bool  { return p.pattern.value != "" }
@@ -841,11 +827,7 @@ var patternMethods = map[string]*starlark.Builtin{
 // TODO: move larger functions to the bottom.
 var patternMembers = map[string]func(p *Pattern) starlark.Value{
 	// Python also determines the flags from the regex string
-	"flags": func(p *Pattern) starlark.Value {
-		p.ensureRflags()
-		return starlark.MakeInt(p.pflags | p.rflags)
-	},
-
+	"flags":   func(p *Pattern) starlark.Value { return starlark.MakeInt(p.flags) },
 	"pattern": func(p *Pattern) starlark.Value { return p.patternValue() },
 	"groups":  func(p *Pattern) starlark.Value { return starlark.MakeInt(p.re.NumSubexp()) },
 	"groupindex": func(p *Pattern) starlark.Value {
@@ -909,7 +891,7 @@ func (p *Pattern) CompareSameType(op syntax.Token, y starlark.Value, _ int) (boo
 }
 
 func patternEquals(x, y *Pattern) (bool, error) {
-	return x.pattern == y.pattern && x.pflags == y.pflags, nil
+	return x.pattern == y.pattern && x.flags == y.flags, nil
 }
 
 // patternSearch - see `reSearch`.

@@ -3,7 +3,6 @@ package re
 import (
 	"errors"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -111,7 +110,7 @@ func getReplacer(thread *starlark.Thread, p *Pattern, r starlark.Value) (replace
 }
 
 // if returned slice empty: contains no backreferences and is just a literal
-func newTemplateReplacer(r *regexp.Regexp, repl string, isString bool) (replacer, error) {
+func newTemplateReplacer(r regexEngine, repl string, isString bool) (replacer, error) {
 	var rules []templateRule
 	withMatch := false
 
@@ -139,7 +138,7 @@ func newTemplateReplacer(r *regexp.Regexp, repl string, isString bool) (replacer
 	return tr, nil
 }
 
-func parseTemplate(r *regexp.Regexp, template string, isString bool) ([]templateRule, error) {
+func parseTemplate(r regexEngine, template string, isString bool) ([]templateRule, error) {
 	var rules []templateRule
 
 	addLiteral := func(s string) {
@@ -227,7 +226,7 @@ func parseTemplate(r *regexp.Regexp, template string, isString bool) ([]template
 			}
 
 			// not octal
-			if index > r.NumSubexp() {
+			if index >= r.NumSubexp() {
 				return nil, fmt.Errorf("invalid group reference %d", index)
 			}
 
@@ -251,7 +250,7 @@ func parseTemplate(r *regexp.Regexp, template string, isString bool) ([]template
 	return rules, nil
 }
 
-func extractGroup(r *regexp.Regexp, template string, isString bool) (index int, rest string, err error) {
+func extractGroup(r regexEngine, template string, isString bool) (index int, rest string, err error) {
 	if template == "" || template[0] != '<' {
 		err = errors.New("missing <")
 		return
