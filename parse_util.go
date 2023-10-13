@@ -19,15 +19,6 @@ func (s *source) init(src string, isStr bool) {
 	s.isStr = isStr
 }
 
-func (s *source) until(src *source) string {
-	before, found := strings.CutSuffix(s.s, src.s)
-	if !found {
-		return ""
-	}
-
-	return before
-}
-
 func (s *source) str() string {
 	return s.s[:]
 }
@@ -153,24 +144,6 @@ func isWhitespace(c rune) bool {
 
 func isDigitC(c rune) bool {
 	return '0' <= c && c <= '9'
-}
-
-func isSpecialChar(c rune) bool {
-	switch c {
-	case '.', '\\', '[', '{', '(', ')', '*', '+', '?', '^', '$', '|':
-		return true
-	default:
-		return false
-	}
-}
-
-func isRepeatChar(c rune) bool {
-	switch c {
-	case '*', '+', '?', '{':
-		return true
-	default:
-		return false
-	}
 }
 
 func isRepeatCode(o opcode) bool {

@@ -1,170 +1,6 @@
 package re
 
-import (
-	"fmt"
-	"slices"
-	"strings"
-)
-
-type subPattern struct {
-	state *state
-	data  []*token
-}
-
-func newSubpattern(state *state) *subPattern {
-	return &subPattern{
-		state: state,
-	}
-}
-
-func (p *subPattern) append(t *token) {
-	p.data = append(p.data, t)
-}
-func (p *subPattern) len() int {
-	return len(p.data)
-}
-
-func (p *subPattern) get(i int) *token {
-	i = p.index(i)
-	return p.data[i]
-}
-func (p *subPattern) index(i int) int {
-	if i < 0 {
-		i += len(p.data)
-	}
-	return i
-}
-
-func (p *subPattern) del(i int) {
-	i = p.index(i)
-	p.data = slices.Delete(p.data, i, i+1)
-}
-
-func (p *subPattern) set(i int, t *token) {
-	i = p.index(i)
-	p.data[i] = t
-}
-
-func (p *subPattern) dump(print func(s string)) {
-	var b strings.Builder
-	p.dumpr(&b, 0)
-
-	if print == nil {
-		fmt.Print(b.String())
-	} else {
-		print(b.String())
-	}
-}
-
-func (p *subPattern) dumpr(b *strings.Builder, level int) {
-	for _, v := range p.data {
-		op := v.opcode
-
-		b.WriteString(strings.Repeat("  ", level))
-		b.WriteString(op.String())
-		dumpToken(v, b, level)
-	}
-}
-
-func dumpToken(v *token, b *strings.Builder, level int) {
-	printr := func(v ...any) {
-		for i, a := range v {
-			if i > 0 {
-				b.WriteByte(' ')
-			}
-			b.WriteString(fmt.Sprint(a))
-		}
-	}
-
-	print := func(v ...any) {
-		printr(v...)
-		b.WriteByte('\n')
-	}
-
-	printParams := func(av ...any) {
-		nl := false
-		for _, a := range av {
-			if sp, ok := a.(*subPattern); ok {
-				if !nl {
-					print()
-				}
-
-				sp.dumpr(b, level+1)
-				nl = true
-			} else {
-				if !nl {
-					printr(" ")
-				}
-				printr(a)
-				nl = false
-			}
-		}
-		if !nl {
-			print()
-		}
-	}
-
-	switch v.opcode {
-	case ASSERT, ASSERT_NOT:
-		pv := v.params.(*paramAssert)
-		printParams(pv.dir, pv.p)
-	case AT:
-		pv := v.params.(paramAt)
-		printParams(pv)
-	case BRANCH:
-		print()
-		pv := v.params.(*paramSubPatterns)
-		for i, a := range pv.p {
-			if i != 0 {
-				print(strings.Repeat("  ", level) + "OR")
-			}
-			a.dumpr(b, level+1)
-		}
-	case CATEGORY:
-		pv := v.params.(paramCategory)
-		printParams(pv)
-	case GROUPREF:
-		pv := v.params.(paramInt)
-		printParams(pv)
-	case GROUPREF_EXISTS:
-		pv := v.params.(*paramGrouprefEx)
-		print("", pv.condgroup)
-
-		pv.itemYes.dumpr(b, level+1)
-		if pv.itemNo != nil {
-			print(strings.Repeat("  ", level) + "ELSE")
-			pv.itemNo.dumpr(b, level+1)
-		}
-	case IN:
-		// member sublanguage
-		print()
-		for _, v := range v.items {
-			op := v.opcode
-			printr(strings.Repeat("  ", level+1) + op.String() + " (")
-			dumpToken(v, b, level)
-			print(")")
-		}
-	case LITERAL, NOT_LITERAL:
-		print("", "'"+string(v.c)+"'")
-	case MIN_REPEAT, MAX_REPEAT, POSSESSIVE_REPEAT:
-		pv := v.params.(*paramRepeat)
-		printParams(pv.min, pv.max, pv.item)
-	case RANGE:
-		pv := v.params.(*paramRange)
-		printParams(pv.min, pv.max)
-	case SUBPATTERN:
-		pv := v.params.(*paramSubPattern)
-		printParams(pv.group, pv.addFlags, pv.delFlags, pv.p)
-	case ATOMIC_GROUP:
-		pv := v.params.(*paramSubPatterns)
-		print()
-		pv.p[0].dumpr(b, level+1)
-	}
-}
-
-func (p *subPattern) string(replacer func(t *token) (string, bool)) string {
-	return ""
-}
+import "slices"
 
 // use interfaces because unions do not exists
 type token struct {
@@ -204,10 +40,6 @@ func (t *token) equals(o *token) bool {
 	return t.params.equals(o.params)
 }
 
-func (t *token) string() string {
-	return ""
-}
-
 type (
 	paramInt      int
 	paramAt       atCode
@@ -219,7 +51,7 @@ type (
 	}
 
 	paramSubPatterns struct {
-		p []*subPattern
+		items []*subPattern
 	}
 
 	paramGrouprefEx struct {
@@ -229,8 +61,8 @@ type (
 	}
 
 	paramRange struct {
-		min rune
-		max rune
+		lo rune
+		hi rune
 	}
 
 	paramRepeat struct {
@@ -240,7 +72,7 @@ type (
 	}
 
 	paramSubPattern struct {
-		group    int
+		group    int // -1: no group
 		addFlags int
 		delFlags int
 		p        *subPattern
@@ -293,7 +125,7 @@ func (p *paramAssert) equals(o params) bool {
 
 func (p *paramSubPatterns) equals(o params) bool {
 	if pp, ok := o.(*paramSubPatterns); ok {
-		return slices.Equal(p.p, pp.p)
+		return slices.Equal(p.items, pp.items)
 	} else {
 		return false
 	}
@@ -309,7 +141,7 @@ func (p *paramGrouprefEx) equals(o params) bool {
 
 func (p *paramRange) equals(o params) bool {
 	if pp, ok := o.(*paramRange); ok {
-		return p.min == pp.min && p.max == pp.max
+		return p.lo == pp.lo && p.hi == pp.hi
 	} else {
 		return false
 	}
@@ -371,7 +203,7 @@ func newSubPatternsToken(op opcode, items []*subPattern) *token {
 	return &token{
 		opcode: op,
 		params: &paramSubPatterns{
-			p: items,
+			items: items,
 		},
 	}
 }
@@ -408,12 +240,12 @@ func newItemsToken(op opcode, items []*token) *token {
 	}
 }
 
-func newRange(op opcode, min, max rune) *token {
+func newRange(op opcode, lo, hi rune) *token {
 	return &token{
 		opcode: op,
 		params: &paramRange{
-			min: min,
-			max: max,
+			lo: lo,
+			hi: hi,
 		},
 	}
 }
@@ -429,7 +261,7 @@ func newRepeat(op opcode, min, max int, item *subPattern) *token {
 	}
 }
 
-func newSubPattern(op opcode, group, addFlags int, delFlags int, p *subPattern) *token {
+func newSubPattern(op opcode, group, addFlags, delFlags int, p *subPattern) *token {
 	return &token{
 		opcode: op,
 		params: &paramSubPattern{
@@ -445,7 +277,7 @@ func newWithSubPattern(op opcode, p *subPattern) *token {
 	return &token{
 		opcode: op,
 		params: &paramSubPatterns{
-			p: []*subPattern{p},
+			items: []*subPattern{p},
 		},
 	}
 }

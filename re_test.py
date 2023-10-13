@@ -721,7 +721,7 @@ def test_bug_1661():
 
 def test_bug_3629():
     # A regex that triggered a bug in the sre-code validator
-    assertRaises(lambda: re.compile("(?P<quote>)(?(quote))"))
+    re.compile("(?P<quote>)(?(quote))")
 
 def test_sub_template_numeric_escape():
     # bug 776311 and friends

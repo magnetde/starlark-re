@@ -3,7 +3,9 @@ package re
 import (
 	"fmt"
 	"regexp/syntax"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 type preprocessor struct {
@@ -17,8 +19,6 @@ func newPreprocessor(s string, isStr bool, flags int) (*preprocessor, error) {
 		return nil, err
 	}
 
-	fmt.Println(">>>", s)
-	fmt.Println()
 	sp.dump(nil) // TODO: remove
 
 	p := &preprocessor{
@@ -29,20 +29,16 @@ func newPreprocessor(s string, isStr bool, flags int) (*preprocessor, error) {
 	return p, nil
 }
 
-func (p *preprocessor) flags() int {
-	return p.p.state.flags
+func (p *preprocessor) hasBackrefs() bool {
+	return p.p.hasBackrefs()
 }
 
 func (p *preprocessor) String() string {
-	/**
+	flags := p.p.state.flags
 
-
-	flags = pp.flags()
+	var b strings.Builder
 
 	if flags&(reFlagIgnoreCase|reFlagMultiline|reFlagDotAll) != 0 {
-		var b strings.Builder
-		b.Grow(len(p) + 3 + bits.OnesCount(uint(flags)))
-
 		b.WriteString("(?")
 
 		if flags&reFlagIgnoreCase != 0 {
@@ -56,25 +52,44 @@ func (p *preprocessor) String() string {
 		}
 
 		b.WriteByte(')')
-		b.WriteString(p)
-
-		p = b.String()
 	}
-	*/
 
-	return ""
-}
+	b.WriteString(p.p.string(p.isStr, p.preReplacer))
 
-func (p *preprocessor) String2() string {
-	return ""
+	return b.String()
 }
 
 func (p *preprocessor) preReplacer(t *token) (string, bool) {
 	ascii := p.p.state.flags&reFlagASCII != 0
 
-	switch t.opcode {
-	case IN:
-		if p.isStr && !ascii {
+	if p.isStr && !ascii {
+		// If the current pattern is a string and the ASCII mode is not enabled,
+		// some patterns had to be replaced with some equivalent unicode counterpart,
+		// because by default, `regexp` only matches ASCII patterns.
+
+		switch t.opcode {
+		case CATEGORY:
+			// not in class
+
+			p := t.params.(paramCategory)
+
+			switch chCode(p) {
+			case CATEGORY_DIGIT:
+				return `\p{Nd}`, true
+			case CATEGORY_NOT_DIGIT:
+				return `\P{Nd}`, true
+			case CATEGORY_SPACE:
+				return `[\p{Z}\v]`, true
+			case CATEGORY_NOT_SPACE:
+				return `[^\p{Z}\v]`, true
+			case CATEGORY_WORD:
+				return `[\p{L}\p{N}_]`, true
+			case CATEGORY_NOT_WORD:
+				return `[^\p{L}\p{N}_]`, true
+			}
+		case IN:
+			// in class
+
 			for _, item := range t.items {
 				if item.opcode == CATEGORY {
 					pm := item.params.(paramCategory)
@@ -85,9 +100,28 @@ func (p *preprocessor) preReplacer(t *token) (string, bool) {
 					case CATEGORY_NOT_DIGIT:
 						return `\P{Nd}`, true
 					case CATEGORY_SPACE:
+						return `\p{Z}\v`, true
 					case CATEGORY_NOT_SPACE:
+						// While it is simple to include the negated character class of `\d` in a character set (by using \P{Nd}),
+						// it is not trivial to include the negated character range of `\p{Z}\v`, since it is not possible to exclude
+						// one of the sets `\p{Z}` AND `\v` at the same time. So, ranges must be included which contain ALL characters
+						// which do not exist in `\p{Z}\v`.
+						r, err := getRanges(`[^\p{Z}\v]`, p.isStr)
+						if err != nil {
+							return "", false
+						}
+
+						return r, true
 					case CATEGORY_WORD:
+						return `\p{L}\p{N}_`, true
 					case CATEGORY_NOT_WORD:
+						// See the comment at case 'S'.
+						r, err := getRanges(`[^\p{L}\p{N}_]`, p.isStr)
+						if err != nil {
+							return "", false
+						}
+
+						return r, true
 					}
 				}
 			}
@@ -120,4 +154,33 @@ func getRanges(s string, isStr bool) (string, error) {
 	}
 
 	return b.String(), nil
+}
+
+func hexEscape(r rune, isStr bool) string {
+	l := utf8.RuneLen(r)
+
+	var w strings.Builder
+	w.WriteString(`\x`)
+
+	s := strconv.FormatInt(int64(r), 16)
+	if l == 1 || (!isStr && r <= 0xff) {
+		if r <= 0xf {
+			w.WriteByte('0')
+		}
+		w.WriteString(s)
+	} else {
+		if l < 0 {
+			l = 4
+		}
+		l *= 2 // 2 chars per byte
+
+		w.WriteByte('{')
+		if len(s) < l {
+			w.WriteString(strings.Repeat("0", l-len(s)))
+		}
+		w.WriteString(s)
+		w.WriteByte('}')
+	}
+
+	return w.String()
 }

@@ -1,6 +1,7 @@
 package re
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -32,7 +33,7 @@ func quoteString(s string, isString bool, bprefix bool) string {
 
 		if quote == '\'' {
 			b.WriteByte('\'')
-			quoteReplacer.WriteString(&b, s[1:len(s)-1])
+			_, _ = quoteReplacer.WriteString(&b, s[1:len(s)-1])
 			b.WriteByte('\'')
 		} else {
 			b.WriteString(s)
@@ -100,6 +101,16 @@ func isIdentifier(name string) bool {
 	return true
 }
 
+func isDigitString(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if !isDigit(s[i]) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func isASCIILetter(b byte) bool {
 	return ('a' <= b && b <= 'z') || ('A' <= b && b <= 'Z')
 }
@@ -157,6 +168,17 @@ func unescapeLetter(c byte) (string, bool) {
 	}
 
 	return "", false
+}
+
+func lookupUnicodeName(name string) (rune, bool) {
+	name = strings.ToUpper(name)
+
+	i, ok := slices.BinarySearch(unicodeNames[:], name)
+	if !ok {
+		return 0, false
+	}
+
+	return unicodeCodepoints[i], true
 }
 
 var specialBytes = [16]byte{

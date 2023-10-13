@@ -22,38 +22,16 @@ type state struct {
 	grouprefpos      map[int]int
 }
 
-func (s *state) init(flags int) {
-	s.flags = flags
+func (s *state) init() {
+	s.flags = 0
 	s.groupdict = make(map[string]int)
-	s.groupwidths = nil
+	s.groupwidths = []bool{false}
 	s.lookbehindgroups = -1
 	s.grouprefpos = make(map[int]int)
 }
 
 func (s *state) groups() int {
 	return len(s.groupwidths)
-}
-
-func (s *state) checkgroup(gid int) bool {
-	if gid < s.groups() {
-		v := s.groupwidths[gid]
-		return v
-	}
-
-	return false
-}
-
-func (s *state) checklookbehindgroup(gid int) error {
-	if s.lookbehindgroups != -1 {
-		if !s.checkgroup(gid) {
-			return errors.New("cannot refer to an open group")
-		}
-		if gid >= s.lookbehindgroups {
-			return errors.New("cannot refer to group defined in the same lookbehind subpattern")
-		}
-	}
-
-	return nil
 }
 
 func (s *state) opengroup(name string) (int, error) {
@@ -78,11 +56,28 @@ func (s *state) closegroup(gid int) {
 	s.groupwidths[gid] = true
 }
 
+func (s *state) checkgroup(gid int) bool {
+	return gid < s.groups() && s.groupwidths[gid]
+}
+
+func (s *state) checklookbehindgroup(gid int) error {
+	if s.lookbehindgroups != -1 {
+		if !s.checkgroup(gid) {
+			return errors.New("cannot refer to an open group")
+		}
+		if gid >= s.lookbehindgroups {
+			return errors.New("cannot refer to group defined in the same lookbehind subpattern")
+		}
+	}
+
+	return nil
+}
+
 // preprocess may not be efficient but it is necessary, if ALL syntax error messages should be
 // equal to the Python re module.
 func parse(str string, isStr bool, flags int) (*subPattern, error) {
 	var state state
-	state.init(flags)
+	state.init()
 
 	var s source
 	s.init(str, isStr)
@@ -371,7 +366,6 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 
 			set = unique(set)
 
-			// XXX: <fl> should move set optimization to compiler!
 			if len(set) == 1 && set[0].opcode == LITERAL {
 				if negate {
 					subpattern.append(newCharToken(NOT_LITERAL, set[0].c))
@@ -615,7 +609,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 							return nil, fmt.Errorf("unknown group name '%s'", condname)
 						}
 					} else {
-						condgroup, err := strconv.Atoi(condname)
+						condgroup, err = strconv.Atoi(condname)
 						if err != nil || condgroup == 0 {
 							return nil, errors.New("bad group number")
 						}
@@ -692,7 +686,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 
 			// parse group contents
 
-			group := -1 // or 0 as default?
+			group := -1
 			if capture {
 				group, err = state.opengroup(name)
 				if err != nil {

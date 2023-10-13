@@ -1,6 +1,7 @@
 package re
 
 import (
+	"errors"
 	"io"
 	"reflect"
 	"regexp"
@@ -26,29 +27,34 @@ type regexInput interface {
 
 // input must be preprocessed
 func compileRegex(p *preprocessor, re2Fallback bool) (regexEngine, error) {
+	var err error
+
 	s := p.String()
 
-	r, err := regexp.Compile(s)
-	if err == nil {
-		re := &stdRegex{
-			re:     r,
-			numCap: numCap(r),
-		}
+	if !p.hasBackrefs() {
+		var r *regexp.Regexp
 
-		// return re, nil
-		_ = re
+		r, err = regexp.Compile(s)
+		if err == nil {
+			re := &stdRegex{
+				re:     r,
+				numCap: numCap(r),
+			}
+
+			// return re, nil
+			_ = re
+		}
+	} else if !re2Fallback {
+		return nil, errors.New("backrefs only supported at the fallback regex engine")
 	}
 
-	// TODO: preprocessor should decide, which regex mwthod should be used
-
 	if re2Fallback {
-		s = p.String2()
-
 		var r2 *regexp2.Regexp
-		r2, err = regexp2.Compile(s, regexp2.RE2) // flags are set by the preprocessor
-		if err == nil {
-			// TODO: preprocess again
 
+		// TODO: preProcess again
+
+		r2, err = regexp2.Compile(s, 0)
+		if err == nil {
 			re := &advRegex{
 				re:     r2,
 				numCap: numCap2(r2),
