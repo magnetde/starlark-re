@@ -32,10 +32,10 @@ type regexInput interface {
 func compileRegex(p *sre.Preprocessor, re2Fallback bool) (regexEngine, error) {
 	var err error
 
-	s := p.String()
-
-	if !p.HasBackrefs() {
+	if !p.IsUnsupported() {
 		var r *regexp.Regexp
+
+		s := p.String()
 
 		r, err = regexp.Compile(s)
 		if err == nil {
@@ -44,19 +44,33 @@ func compileRegex(p *sre.Preprocessor, re2Fallback bool) (regexEngine, error) {
 				numCap: numCap(r),
 			}
 
-			// return re, nil
-			_ = re
+			return re, nil
 		}
 	} else if !re2Fallback {
-		return nil, errors.New("backrefs only supported at the fallback regex engine")
+		return nil, errors.New("regex has unsupported elements")
 	}
 
 	if re2Fallback {
 		var r2 *regexp2.Regexp
 
-		// TODO: preProcess again
+		s := p.FallbackString()
+		flags := p.Flags()
+		options := regexp2.None | regexp2.RE2
 
-		r2, err = regexp2.Compile(s, 0)
+		if flags&sre.FlagIgnoreCase != 0 {
+			options |= regexp2.IgnoreCase
+		}
+		if flags&sre.FlagMultiline != 0 {
+			options |= regexp2.Multiline
+		}
+		if flags&sre.FlagDotAll != 0 {
+			options |= regexp2.Singleline
+		}
+		if flags&sre.FlagUnicode != 0 {
+			options |= regexp2.Unicode
+		}
+
+		r2, err = regexp2.Compile(s, options)
 		if err == nil {
 			re := &advRegex{
 				re:     r2,

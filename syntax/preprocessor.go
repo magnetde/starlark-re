@@ -3,9 +3,7 @@ package syntax
 import (
 	"fmt"
 	"regexp/syntax"
-	"strconv"
 	"strings"
-	"unicode/utf8"
 )
 
 type Preprocessor struct {
@@ -27,6 +25,10 @@ func NewPreprocessor(s string, isStr bool, flags int) (*Preprocessor, error) {
 	}
 
 	return p, nil
+}
+
+func (p *Preprocessor) Flags() int {
+	return p.p.state.flags
 }
 
 func (p *Preprocessor) HasBackrefs() bool {
@@ -54,133 +56,155 @@ func (p *Preprocessor) String() string {
 		b.WriteByte(')')
 	}
 
-	b.WriteString(p.p.string(p.isStr, p.preReplacer))
+	b.WriteString(p.p.string(p.isStr, p.replacer))
 
 	return b.String()
 }
 
-func (p *Preprocessor) preReplacer(t *token) (string, bool) {
+func (p *Preprocessor) FallbackString() string {
+	var b strings.Builder
+
+	b.WriteString(p.p.string(p.isStr, p.fallbackReplacer))
+
+	return b.String()
+}
+
+func (p *Preprocessor) replacer(w *subPatternWriter, t *token) bool {
 	ascii := p.p.state.flags&FlagASCII != 0
 
-	if p.isStr && !ascii {
-		// If the current pattern is a string and the ASCII mode is not enabled,
-		// some patterns had to be replaced with some equivalent unicode counterpart,
-		// because by default, `regexp` only matches ASCII patterns.
+	if !p.isStr || ascii {
+		return false
+	}
 
-		switch t.opcode {
-		case CATEGORY:
-			// not in class
+	// If the current pattern is a string and the ASCII mode is not enabled,
+	// some patterns had to be replaced with some equivalent unicode counterpart,
+	// because by default, `regexp` only matches ASCII patterns.
 
-			p := t.params.(paramCategory)
+	switch t.opcode {
+	case CATEGORY:
+		// not in class
 
-			switch chCode(p) {
-			case CATEGORY_DIGIT:
-				return `\p{Nd}`, true
-			case CATEGORY_NOT_DIGIT:
-				return `\P{Nd}`, true
-			case CATEGORY_SPACE:
-				return `[\p{Z}\v]`, true
-			case CATEGORY_NOT_SPACE:
-				return `[^\p{Z}\v]`, true
-			case CATEGORY_WORD:
-				return `[\p{L}\p{N}_]`, true
-			case CATEGORY_NOT_WORD:
-				return `[^\p{L}\p{N}_]`, true
-			}
-		case IN:
-			// in class
+		p := t.params.(paramCategory)
 
-			for _, item := range t.items {
-				if item.opcode == CATEGORY {
-					pm := item.params.(paramCategory)
+		switch chCode(p) {
+		case CATEGORY_DIGIT:
+			w.WriteString(`\p{Nd}`)
+			return true
+		case CATEGORY_NOT_DIGIT:
+			w.WriteString(`\P{Nd}`)
+			return true
+		case CATEGORY_SPACE:
+			w.WriteString(`[\p{Z}\v]`)
+			return true
+		case CATEGORY_NOT_SPACE:
+			w.WriteString(`[^\p{Z}\v]`)
+			return true
+		case CATEGORY_WORD:
+			w.WriteString(`[\p{L}\p{N}_]`)
+			return true
+		case CATEGORY_NOT_WORD:
+			w.WriteString(`[^\p{L}\p{N}_]`)
+			return true
+		}
+	case IN:
+		// in class
 
-					switch chCode(pm) {
-					case CATEGORY_DIGIT:
-						return `\p{Nd}`, true
-					case CATEGORY_NOT_DIGIT:
-						return `\P{Nd}`, true
-					case CATEGORY_SPACE:
-						return `\p{Z}\v`, true
-					case CATEGORY_NOT_SPACE:
-						// While it is simple to include the negated character class of `\d` in a character set (by using \P{Nd}),
-						// it is not trivial to include the negated character range of `\p{Z}\v`, since it is not possible to exclude
-						// one of the sets `\p{Z}` AND `\v` at the same time. So, ranges must be included which contain ALL characters
-						// which do not exist in `\p{Z}\v`.
-						r, err := getRanges(`[^\p{Z}\v]`, p.isStr)
-						if err != nil {
-							return "", false
-						}
+		for _, item := range t.items {
+			if item.opcode == CATEGORY {
+				pm := item.params.(paramCategory)
 
-						return r, true
-					case CATEGORY_WORD:
-						return `\p{L}\p{N}_`, true
-					case CATEGORY_NOT_WORD:
-						// See the comment at case 'S'.
-						r, err := getRanges(`[^\p{L}\p{N}_]`, p.isStr)
-						if err != nil {
-							return "", false
-						}
-
-						return r, true
-					}
+				switch chCode(pm) {
+				case CATEGORY_DIGIT:
+					w.WriteString(`\p{Nd}`)
+					return true
+				case CATEGORY_NOT_DIGIT:
+					w.WriteString(`\P{Nd}`)
+					return true
+				case CATEGORY_SPACE:
+					w.WriteString(`\p{Z}\v`)
+					return true
+				case CATEGORY_NOT_SPACE:
+					// While it is simple to include the negated character class of `\d` in a character set (by using \P{Nd}),
+					// it is not trivial to include the negated character range of `\p{Z}\v`, since it is not possible to exclude
+					// one of the sets `\p{Z}` AND `\v` at the same time. So, ranges must be included which contain ALL characters
+					// which do not exist in `\p{Z}\v`.
+					err := p.writeRange(w, `[^\p{Z}\v]`)
+					return err == nil
+				case CATEGORY_WORD:
+					w.WriteString(`\p{L}\p{N}_`)
+					return true
+				case CATEGORY_NOT_WORD:
+					// See the comment at case 'S'.
+					err := p.writeRange(w, `[^\p{L}\p{N}_]`)
+					return err == nil
 				}
 			}
 		}
 	}
 
-	return "", false
+	return false
 }
 
-func getRanges(s string, isStr bool) (string, error) {
+func (p *Preprocessor) writeRange(w *subPatternWriter, s string) error {
 	re, err := syntax.Parse(s, syntax.Perl)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	if re.Op != syntax.OpCharClass {
-		return "", fmt.Errorf("expected regex syntax type %s, got %s", syntax.OpCharClass, re.Op)
+		return fmt.Errorf("expected regex syntax type %s, got %s", syntax.OpCharClass, re.Op)
 	}
-
-	var b strings.Builder
 
 	for i := 0; i < len(re.Rune); i += 2 {
 		lo, hi := re.Rune[i], re.Rune[i+1]
 
-		b.WriteString(hexEscape(lo, isStr))
+		w.writeLiteral(lo)
 		if lo != hi {
-			b.WriteByte('-')
-			b.WriteString(hexEscape(hi, isStr))
+			w.WriteByte('-')
+			w.writeLiteral(hi)
 		}
 	}
 
-	return b.String(), nil
+	return nil
 }
 
-func hexEscape(r rune, isStr bool) string {
-	l := utf8.RuneLen(r)
+func (p *Preprocessor) fallbackReplacer(w *subPatternWriter, t *token) bool {
+	if t.opcode == SUBPATTERN {
+		p := t.params.(*paramSubPattern)
 
-	var w strings.Builder
-	w.WriteString(`\x`)
+		w.WriteByte('(')
 
-	s := strconv.FormatInt(int64(r), 16)
-	if l == 1 || (!isStr && r <= 0xff) {
-		if r <= 0xf {
-			w.WriteByte('0')
-		}
-		w.WriteString(s)
-	} else {
-		if l < 0 {
-			l = 4
-		}
-		l *= 2 // 2 chars per byte
+		if p.group >= 0 {
+			groupName := groupname(p.p, p.group)
+			if groupName != "" {
+				w.WriteString("?<") // No ? before P
+				w.WriteString(groupName)
+				w.WriteByte('>')
+			}
+		} else if p.addFlags != 0 || p.delFlags != 0 {
+			// Flags can only appear, when no group name exists
 
-		w.WriteByte('{')
-		if len(s) < l {
-			w.WriteString(strings.Repeat("0", l-len(s)))
+			w.WriteByte('?')
+			if p.addFlags != 0 {
+				w.writeFlags(p.addFlags)
+			}
+			if p.delFlags != 0 {
+				w.WriteByte('-')
+				w.writeFlags(p.addFlags)
+			}
+
+			if p.p.len() > 0 {
+				w.WriteByte(':')
+			}
 		}
-		w.WriteString(s)
-		w.WriteByte('}')
+
+		if p.p.len() > 0 {
+			w.writePattern(p.p)
+		}
+
+		w.WriteByte(')')
+		return true
 	}
 
-	return w.String()
+	return false
 }

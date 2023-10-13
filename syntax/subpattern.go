@@ -47,9 +47,10 @@ func (p *subPattern) set(i int, t *token) {
 	p.data[i] = t
 }
 
-func (p *subPattern) hasBackrefs() bool {
+// isUnsupported returns, whether the subpattern is unsupported by the std regexp engine.
+func (p *subPattern) isUnsupported() bool {
 	for _, item := range p.data {
-		if hasBackrefsToken(item) {
+		if isUnsupported(item) {
 			return true
 		}
 	}
@@ -57,38 +58,26 @@ func (p *subPattern) hasBackrefs() bool {
 	return false
 }
 
-func hasBackrefsToken(t *token) bool {
+func isUnsupported(t *token) bool {
 	switch t.opcode {
-	case ASSERT, ASSERT_NOT:
-		p := t.params.(*paramAssert)
-
-		return p.p.hasBackrefs()
+	case ASSERT, ASSERT_NOT, GROUPREF, GROUPREF_EXISTS, ATOMIC_GROUP:
+		return true
 	case BRANCH:
 		p := t.params.(*paramSubPatterns)
 
 		for _, item := range p.items {
-			if item.hasBackrefs() {
+			if item.isUnsupported() {
 				return true
 			}
 		}
-	case GROUPREF:
-		return true
-	case GROUPREF_EXISTS:
-		p := t.params.(*paramGrouprefEx)
-
-		return p.itemYes.hasBackrefs() || (p.itemNo != nil && p.itemNo.hasBackrefs())
 	case MIN_REPEAT, MAX_REPEAT, POSSESSIVE_REPEAT:
 		p := t.params.(*paramRepeat)
 
-		return p.item.hasBackrefs()
+		return p.item.isUnsupported()
 	case SUBPATTERN:
 		p := t.params.(*paramSubPattern)
 
-		return p.p.hasBackrefs()
-	case ATOMIC_GROUP:
-		p := t.params.(*paramSubPatterns)
-
-		return p.items[0].hasBackrefs()
+		return p.p.isUnsupported()
 	}
 
 	return false
@@ -233,7 +222,7 @@ func dumpToken(v *token, b *strings.Builder, level int) {
 }
 
 // TODO: change the replacer parameters, so the *subPatternWriter can be used.
-func (p *subPattern) string(isStr bool, replace func(t *token) (string, bool)) string {
+func (p *subPattern) string(isStr bool, replace func(w *subPatternWriter, t *token) bool) string {
 	w := subPatternWriter{
 		isStr:   isStr,
 		replace: replace,
@@ -246,14 +235,12 @@ func (p *subPattern) string(isStr bool, replace func(t *token) (string, bool)) s
 type subPatternWriter struct {
 	strings.Builder
 	isStr   bool
-	replace func(t *token) (string, bool)
+	replace func(w *subPatternWriter, t *token) bool
 }
 
 func (w *subPatternWriter) writePattern(p *subPattern) {
 	for _, item := range p.data {
-		if s, ok := w.replace(item); ok {
-			w.WriteString(s)
-		} else {
+		if !w.replace(w, item) {
 			w.writeToken(item)
 		}
 	}
