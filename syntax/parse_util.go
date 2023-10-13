@@ -1,10 +1,11 @@
-package re
+package syntax
 
 import (
 	"fmt"
 	"strings"
-	"unicode"
 	"unicode/utf8"
+
+	"github.com/magnetde/starlark-re/util"
 )
 
 type source struct {
@@ -95,11 +96,11 @@ func (s *source) match(c rune) bool {
 func (s *source) nextInt() int {
 	i := 0
 	for len(s.s) > 0 {
-		if !isDigit(s.s[0]) {
+		if !util.IsDigit(s.s[0]) {
 			break
 		}
 
-		i = 10*i + digit(s.s[0])
+		i = 10*i + util.Digit(s.s[0])
 		s.s = s.s[1:]
 	}
 
@@ -155,17 +156,8 @@ func isRepeatCode(o opcode) bool {
 	}
 }
 
-func isASCII(s string) bool {
-	for i := 0; i < len(s); i++ {
-		if s[i] > unicode.MaxASCII {
-			return false
-		}
-	}
-	return true
-}
-
 func checkgroupname(name string) error {
-	if !isIdentifier(name) {
+	if !util.IsIdentifier(name) {
 		return fmt.Errorf("bad character in group name '%s'", name)
 	}
 	return nil
@@ -184,20 +176,20 @@ func getFlag(c rune) int {
 	switch c {
 	// standard flags
 	case 'i':
-		return reFlagIgnoreCase
+		return FlagIgnoreCase
 	case 'L':
-		return reFlagLocale
+		return FlagLocale
 	case 'm':
-		return reFlagMultiline
+		return FlagMultiline
 	case 's':
-		return reFlagDotAll
+		return FlagDotAll
 	case 'x':
-		return reFlagVerbose
+		return FlagVerbose
 	// extensions
 	case 'a':
-		return reFlagASCII
+		return FlagASCII
 	case 'u':
-		return reFlagUnicode
+		return FlagUnicode
 	default:
 		return 0
 	}

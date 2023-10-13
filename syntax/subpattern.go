@@ -1,4 +1,4 @@
-package re
+package syntax
 
 import (
 	"fmt"
@@ -493,25 +493,25 @@ func (w *subPatternWriter) writeCategory(t *token) {
 }
 
 func (w *subPatternWriter) writeFlags(flags int) {
-	if flags&reFlagASCII != 0 {
+	if flags&FlagASCII != 0 {
 		w.WriteByte('a')
 	}
-	if flags&reFlagIgnoreCase != 0 {
+	if flags&FlagIgnoreCase != 0 {
 		w.WriteByte('i')
 	}
-	if flags&reFlagLocale != 0 {
+	if flags&FlagLocale != 0 {
 		w.WriteByte('L')
 	}
-	if flags&reFlagMultiline != 0 {
+	if flags&FlagMultiline != 0 {
 		w.WriteByte('m')
 	}
-	if flags&reFlagDotAll != 0 {
+	if flags&FlagDotAll != 0 {
 		w.WriteByte('s')
 	}
-	if flags&reFlagUnicode != 0 {
+	if flags&FlagUnicode != 0 {
 		w.WriteByte('u')
 	}
-	if flags&reFlagVerbose != 0 {
+	if flags&FlagVerbose != 0 {
 		w.WriteByte('x')
 	}
 }

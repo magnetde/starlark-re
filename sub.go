@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"go.starlark.net/starlark"
+
+	"github.com/magnetde/starlark-re/util"
 )
 
 type replacer interface {
@@ -192,10 +194,10 @@ func parseTemplate(r regexEngine, template string, isString bool) ([]templateRul
 			chr := 0
 
 			if len(template) > 0 && isOctDigit(template[0]) {
-				chr = digit(template[0])
+				chr = util.Digit(template[0])
 
 				if len(template) > 1 && isOctDigit(template[1]) {
-					chr = 8*chr + digit(template[1])
+					chr = 8*chr + util.Digit(template[1])
 					template = template[2:]
 				} else {
 					template = template[1:]
@@ -204,13 +206,13 @@ func parseTemplate(r regexEngine, template string, isString bool) ([]templateRul
 
 			addLiteral(string(rune(chr)))
 		case '1', '2', '3', '4', '5', '6', '7', '8', '9': // index or octal string
-			index := digit(c)
+			index := util.Digit(c)
 
-			if len(template) > 0 && isDigit(template[0]) {
+			if len(template) > 0 && util.IsDigit(template[0]) {
 				if isOctDigit(c) && isOctDigit(template[0]) &&
 					len(template) > 1 && isOctDigit(template[1]) {
 
-					index = 8*(8*index+digit(template[0])) + digit(template[1])
+					index = 8*(8*index+util.Digit(template[0])) + util.Digit(template[1])
 					if index > 0o377 {
 						return nil, fmt.Errorf(`octal escape value \%s outside of range 0-0o377`, string(c)+template[:2])
 					}
@@ -221,7 +223,7 @@ func parseTemplate(r regexEngine, template string, isString bool) ([]templateRul
 					break // break out of case
 				}
 
-				index = 10*index + digit(template[0])
+				index = 10*index + util.Digit(template[0])
 				template = template[1:]
 			}
 
@@ -235,7 +237,7 @@ func parseTemplate(r regexEngine, template string, isString bool) ([]templateRul
 			if escape, ok := unescapeLetter(c); ok {
 				addLiteral(escape)
 			} else {
-				if isASCIILetter(c) {
+				if util.IsASCIILetter(c) {
 					return nil, fmt.Errorf("bad escape \\%c", c)
 				}
 
@@ -270,8 +272,8 @@ func extractGroup(r regexEngine, template string, isString bool) (index int, res
 
 	uindex, intErr := strconv.ParseUint(name, 10, 0)
 	if intErr != nil {
-		if !isIdentifier(name) {
-			err = fmt.Errorf("bad character in group name %s", quoteString(name, isString, false))
+		if !util.IsIdentifier(name) {
+			err = fmt.Errorf("bad character in group name %s", util.QuoteString(name, isString, false))
 			return
 		}
 

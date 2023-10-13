@@ -12,6 +12,9 @@ import (
 	"unsafe"
 
 	"github.com/dlclark/regexp2"
+
+	sre "github.com/magnetde/starlark-re/syntax"
+	"github.com/magnetde/starlark-re/util"
 )
 
 type regexEngine interface {
@@ -26,12 +29,12 @@ type regexInput interface {
 }
 
 // input must be preprocessed
-func compileRegex(p *preprocessor, re2Fallback bool) (regexEngine, error) {
+func compileRegex(p *sre.Preprocessor, re2Fallback bool) (regexEngine, error) {
 	var err error
 
 	s := p.String()
 
-	if !p.hasBackrefs() {
+	if !p.HasBackrefs() {
 		var r *regexp.Regexp
 
 		r, err = regexp.Compile(s)
@@ -257,7 +260,7 @@ func (r *advRegex) BuildInput(s string) regexInput {
 }
 
 func getRuneOffsets(s string) ([]rune, []int, []int) {
-	if isASCII(s) { // if the string has only ASCII characters, offsets are not necessary
+	if util.IsASCII(s) { // if the string has only ASCII characters, offsets are not necessary
 		return []rune(s), nil, nil
 	}
 

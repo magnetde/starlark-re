@@ -1,4 +1,4 @@
-package re
+package syntax
 
 // See https://github.com/justinmeza/lci/blob/main/unicode.c
 

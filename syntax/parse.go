@@ -1,4 +1,4 @@
-package re
+package syntax
 
 import (
 	"errors"
@@ -7,11 +7,13 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/magnetde/starlark-re/util"
 )
 
 const (
-	typeFlags   = reFlagASCII | reFlagLocale | reFlagUnicode
-	globalFlags = reFlagDebug
+	typeFlags   = FlagASCII | FlagLocale | FlagUnicode
+	globalFlags = FlagDebug
 )
 
 type state struct {
@@ -42,7 +44,7 @@ func (s *state) opengroup(name string) (int, error) {
 	}
 	if name != "" {
 		ogid, ok := s.groupdict[name]
-		if !ok {
+		if ok {
 			return 0, fmt.Errorf("redefinition of group name '%s' as group %d; was group %d", name, gid, ogid)
 		}
 
@@ -82,7 +84,7 @@ func parse(str string, isStr bool, flags int) (*subPattern, error) {
 	var s source
 	s.init(str, isStr)
 
-	p, err := parseSub(&s, &state, flags&reFlagVerbose != 0, 0)
+	p, err := parseSub(&s, &state, flags&FlagVerbose != 0, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +106,7 @@ func parse(str string, isStr bool, flags int) (*subPattern, error) {
 		}
 	}
 
-	if flags&reFlagDebug != 0 {
+	if flags&FlagDebug != 0 {
 		p.dump(nil) // TODO: call later
 	}
 
@@ -114,19 +116,19 @@ func parse(str string, isStr bool, flags int) (*subPattern, error) {
 func checkFlags(flags int, isStr bool) (int, error) {
 	// check for incompatible flags
 	if isStr {
-		if flags&reFlagLocale != 0 {
+		if flags&FlagLocale != 0 {
 			return 0, errors.New("cannot use LOCALE flag with a str pattern")
 		}
-		if flags&reFlagASCII == 0 {
-			flags |= reFlagUnicode
-		} else if flags&reFlagUnicode != 0 {
+		if flags&FlagASCII == 0 {
+			flags |= FlagUnicode
+		} else if flags&FlagUnicode != 0 {
 			return 0, errors.New("ASCII and UNICODE flags are incompatible")
 		}
 	} else {
-		if flags&reFlagUnicode != 0 {
+		if flags&FlagUnicode != 0 {
 			return 0, errors.New("cannot use UNICODE flag with a bytes pattern")
 		}
-		if flags&reFlagLocale != 0 && flags&reFlagASCII != 0 {
+		if flags&FlagLocale != 0 && flags&FlagASCII != 0 {
 			return 0, errors.New("ASCII and LOCALE flags are incompatible")
 		}
 	}
@@ -152,7 +154,7 @@ func parseSub(s *source, state *state, verbose bool, nested int) (*subPattern, e
 		}
 
 		if nested == 0 {
-			verbose = state.flags&reFlagVerbose != 0
+			verbose = state.flags&FlagVerbose != 0
 		}
 	}
 
@@ -598,7 +600,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 						return nil, err
 					}
 
-					if !(isDigitString(condname) && isASCII(condname)) {
+					if !(isDigitString(condname) && util.IsASCII(condname)) {
 						err = checkgroupname(condname)
 						if err != nil {
 							return nil, err
@@ -621,8 +623,8 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 						if _, ok = state.grouprefpos[condgroup]; !ok {
 							state.grouprefpos[condgroup] = s.tell() - len(condname) - 1
 						}
-						if !(isDigitString(condname) && isASCII(condname)) {
-							return nil, fmt.Errorf("bad character in group name %s", quoteString(condname, s.isStr, false))
+						if !(isDigitString(condname) && util.IsASCII(condname)) {
+							return nil, fmt.Errorf("bad character in group name %s", util.QuoteString(condname, s.isStr, false))
 						}
 					}
 
@@ -673,7 +675,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 								return nil, errors.New("global flags not at the start of the expression")
 							}
 
-							verbose = state.flags&reFlagVerbose != 0
+							verbose = state.flags&FlagVerbose != 0
 							continue
 						}
 
@@ -694,7 +696,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 				}
 			}
 
-			subVerbose := ((verbose || (addFlags&reFlagVerbose != 0)) && !(delFlags&reFlagVerbose != 0))
+			subVerbose := ((verbose || (addFlags&FlagVerbose != 0)) && !(delFlags&FlagVerbose != 0))
 
 			p, err := parseSub(s, state, subVerbose, nested+1)
 			if err != nil {
@@ -812,17 +814,17 @@ func parseEscape(s *source, state *state, inCls bool) (*token, error) {
 	case '1', '2', '3', '4', '5', '6', '7', '8', '9':
 		// octal escape *or* decimal group reference (only if not in class)
 
-		value := digitC(c)
+		value := digit(c)
 
 		if !inCls {
 			if c1, ok := s.peek(); ok && isDigitC(c1) {
 				s.read()
 
-				if isOctDigitC(c) && isOctDigitC(c1) {
-					if c2, ok := s.peek(); ok && isOctDigitC(c2) {
+				if isOctDigit(c) && isOctDigit(c1) {
+					if c2, ok := s.peek(); ok && isOctDigit(c2) {
 						s.read()
 
-						value = 8*(8*value+digitC(c1)) + digitC(c2)
+						value = 8*(8*value+digit(c1)) + digit(c2)
 						if value > 0o377 {
 							return nil, fmt.Errorf(`octal escape value \%c%c%c outside of range 0-0o377`, c, c1, c2)
 						}
@@ -831,7 +833,7 @@ func parseEscape(s *source, state *state, inCls bool) (*token, error) {
 					}
 				}
 
-				value = 10*value + digitC(c1)
+				value = 10*value + digit(c1)
 			}
 
 			// not an octal escape, so this is a group reference
@@ -915,7 +917,7 @@ func parseEscape(s *source, state *state, inCls bool) (*token, error) {
 			return newAtToken(AT, AT_END_STRING), nil
 		}
 	default:
-		if !isASCIILetterC(c) {
+		if !isASCIILetter(c) {
 			return newLiteral(c), nil
 		}
 	}
@@ -929,8 +931,8 @@ func parseIntRune(s string, base int) rune {
 	return rune(r)
 }
 
-func parseFlags(s *source, state *state, char rune) (addFlags int, delFlags int, returned bool, err error) {
-	returned = true
+func parseFlags(s *source, state *state, char rune) (addFlags int, delFlags int, result bool, err error) {
+	var ok bool
 
 	if char != '-' {
 		for {
@@ -949,12 +951,12 @@ func parseFlags(s *source, state *state, char rune) (addFlags int, delFlags int,
 			flag := getFlag(char)
 
 			addFlags |= flag
-			if (flag&typeFlags) != 0 && (addFlags&typeFlags) != flag {
+			if (flag&typeFlags != 0) && (addFlags&typeFlags) != flag {
 				err = errors.New("bad inline flags: flags 'a', 'u' and 'L' are incompatible")
 				return
 			}
 
-			char, ok := s.read()
+			char, ok = s.read()
 			if !ok {
 				err = errors.New("missing -, : or )")
 				return
@@ -963,8 +965,9 @@ func parseFlags(s *source, state *state, char rune) (addFlags int, delFlags int,
 			if strings.ContainsRune(")-:", char) {
 				break
 			}
+
 			if !isFlag(char) {
-				if isASCIILetterC(char) {
+				if isASCIILetter(char) {
 					err = errors.New("unknown flag")
 					return
 				}
@@ -977,7 +980,6 @@ func parseFlags(s *source, state *state, char rune) (addFlags int, delFlags int,
 
 	if char == ')' {
 		state.flags |= addFlags
-		returned = false
 		return
 	}
 
@@ -987,14 +989,14 @@ func parseFlags(s *source, state *state, char rune) (addFlags int, delFlags int,
 	}
 
 	if char == '-' {
-		char, ok := s.read()
+		char, ok = s.read()
 		if !ok {
 			err = errors.New("missing flag")
 			return
 		}
 
 		if !isFlag(char) {
-			if isASCIILetterC(char) {
+			if isASCIILetter(char) {
 				err = errors.New("unknown flag")
 				return
 			}
@@ -1023,7 +1025,7 @@ func parseFlags(s *source, state *state, char rune) (addFlags int, delFlags int,
 			}
 
 			if !isFlag(char) {
-				if isASCIILetterC(char) {
+				if isASCIILetter(char) {
 					err = errors.New("unknown flag")
 					return
 				}
@@ -1043,5 +1045,6 @@ func parseFlags(s *source, state *state, char rune) (addFlags int, delFlags int,
 		return
 	}
 
+	result = true
 	return
 }

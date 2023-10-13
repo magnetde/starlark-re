@@ -11,6 +11,9 @@ import (
 
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
+
+	sre "github.com/magnetde/starlark-re/syntax"
+	"github.com/magnetde/starlark-re/util"
 )
 
 const (
@@ -21,19 +24,6 @@ const (
 	// Should be used as the default value of `endpos`, because the position parameters always gets clamped.
 	// See also `clamp()`.
 	posMax = math.MaxInt
-)
-
-// Possible flags for the flag parameter.
-const (
-	_ = 1 << iota // `re.TEMPLATE`; unused
-	reFlagIgnoreCase
-	reFlagLocale
-	reFlagMultiline
-	reFlagDotAll
-	reFlagUnicode
-	reFlagVerbose
-	reFlagDebug
-	reFlagASCII
 )
 
 var zeroInt = starlark.MakeInt(0)
@@ -69,22 +59,22 @@ type cacheValue struct {
 // NewModule creates a new re module with the given member dict.
 func NewModule(re2Fallback bool) *Module {
 	members := starlark.StringDict{
-		"A":          starlark.MakeInt(reFlagASCII),
-		"ASCII":      starlark.MakeInt(reFlagASCII),
-		"DEBUG":      starlark.MakeInt(reFlagDebug),
-		"I":          starlark.MakeInt(reFlagIgnoreCase),
-		"IGNORECASE": starlark.MakeInt(reFlagIgnoreCase),
-		"L":          starlark.MakeInt(reFlagLocale),
-		"LOCALE":     starlark.MakeInt(reFlagLocale),
-		"M":          starlark.MakeInt(reFlagMultiline),
-		"MULTILINE":  starlark.MakeInt(reFlagMultiline),
+		"A":          starlark.MakeInt(sre.FlagASCII),
+		"ASCII":      starlark.MakeInt(sre.FlagASCII),
+		"DEBUG":      starlark.MakeInt(sre.FlagDebug),
+		"I":          starlark.MakeInt(sre.FlagIgnoreCase),
+		"IGNORECASE": starlark.MakeInt(sre.FlagIgnoreCase),
+		"L":          starlark.MakeInt(sre.FlagLocale),
+		"LOCALE":     starlark.MakeInt(sre.FlagLocale),
+		"M":          starlark.MakeInt(sre.FlagMultiline),
+		"MULTILINE":  starlark.MakeInt(sre.FlagMultiline),
 		"NOFLAG":     zeroInt,
-		"S":          starlark.MakeInt(reFlagDotAll),
-		"DOTALL":     starlark.MakeInt(reFlagDotAll),
-		"U":          starlark.MakeInt(reFlagUnicode),
-		"UNICODE":    starlark.MakeInt(reFlagUnicode),
-		"X":          starlark.MakeInt(reFlagVerbose),
-		"VERBOSE":    starlark.MakeInt(reFlagVerbose),
+		"S":          starlark.MakeInt(sre.FlagDotAll),
+		"DOTALL":     starlark.MakeInt(sre.FlagDotAll),
+		"U":          starlark.MakeInt(sre.FlagUnicode),
+		"UNICODE":    starlark.MakeInt(sre.FlagUnicode),
+		"X":          starlark.MakeInt(sre.FlagVerbose),
+		"VERBOSE":    starlark.MakeInt(sre.FlagVerbose),
 
 		"compile": starlark.NewBuiltin("compile", reCompile),
 		"purge":   starlark.NewBuiltin("purge", rePurge),
@@ -639,7 +629,7 @@ func newPattern(pattern strOrBytes, flags int, re2Fallback bool) (*Pattern, erro
 	isStr := pattern.isString
 
 	// replace unicode patterns, that are supported by Pathon but not supported by Go
-	pp, err := newPreprocessor(p, isStr, flags)
+	pp, err := sre.NewPreprocessor(p, isStr, flags)
 	if err != nil {
 		return nil, err
 	}
@@ -687,7 +677,7 @@ func (p *Pattern) patternValue() starlark.String { return starlark.String(p.patt
 func (p *Pattern) String() string {
 	s := p.pattern
 
-	r := quoteString(s.value, s.isString, true)
+	r := util.QuoteString(s.value, s.isString, true)
 	if len(r) > 200 {
 		r = r[:200]
 	}
@@ -718,8 +708,8 @@ func (p *Pattern) writeflags(b *strings.Builder) {
 	flags := p.flags
 
 	// Omit re.UNICODE for valid string patterns.
-	if p.pattern.isString && flags&(reFlagLocale|reFlagUnicode|reFlagASCII) == reFlagUnicode {
-		flags &= ^reFlagUnicode
+	if p.pattern.isString && flags&(sre.FlagLocale|sre.FlagUnicode|sre.FlagASCII) == sre.FlagUnicode {
+		flags &= ^sre.FlagUnicode
 	}
 
 	if flags == 0 {
@@ -1029,7 +1019,7 @@ var (
 func (m *Match) String() string { // TODO
 	g := m.groups[0]
 	return fmt.Sprintf("<re.match object; span=(%d, %d), match=%s>",
-		g.start, g.end, quoteString(g.str, m.str.isString, true),
+		g.start, g.end, util.QuoteString(g.str, m.str.isString, true),
 	)
 }
 

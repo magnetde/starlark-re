@@ -1,4 +1,4 @@
-package re
+package syntax
 
 import (
 	"fmt"
@@ -8,12 +8,12 @@ import (
 	"unicode/utf8"
 )
 
-type preprocessor struct {
+type Preprocessor struct {
 	isStr bool
 	p     *subPattern
 }
 
-func newPreprocessor(s string, isStr bool, flags int) (*preprocessor, error) {
+func NewPreprocessor(s string, isStr bool, flags int) (*Preprocessor, error) {
 	sp, err := parse(s, isStr, flags)
 	if err != nil {
 		return nil, err
@@ -21,7 +21,7 @@ func newPreprocessor(s string, isStr bool, flags int) (*preprocessor, error) {
 
 	sp.dump(nil) // TODO: remove
 
-	p := &preprocessor{
+	p := &Preprocessor{
 		isStr: isStr,
 		p:     sp,
 	}
@@ -29,25 +29,25 @@ func newPreprocessor(s string, isStr bool, flags int) (*preprocessor, error) {
 	return p, nil
 }
 
-func (p *preprocessor) hasBackrefs() bool {
+func (p *Preprocessor) HasBackrefs() bool {
 	return p.p.hasBackrefs()
 }
 
-func (p *preprocessor) String() string {
+func (p *Preprocessor) String() string {
 	flags := p.p.state.flags
 
 	var b strings.Builder
 
-	if flags&(reFlagIgnoreCase|reFlagMultiline|reFlagDotAll) != 0 {
+	if flags&(FlagIgnoreCase|FlagMultiline|FlagDotAll) != 0 {
 		b.WriteString("(?")
 
-		if flags&reFlagIgnoreCase != 0 {
+		if flags&FlagIgnoreCase != 0 {
 			b.WriteByte('i')
 		}
-		if flags&reFlagMultiline != 0 {
+		if flags&FlagMultiline != 0 {
 			b.WriteByte('m')
 		}
-		if flags&reFlagDotAll != 0 {
+		if flags&FlagDotAll != 0 {
 			b.WriteByte('s')
 		}
 
@@ -59,8 +59,8 @@ func (p *preprocessor) String() string {
 	return b.String()
 }
 
-func (p *preprocessor) preReplacer(t *token) (string, bool) {
-	ascii := p.p.state.flags&reFlagASCII != 0
+func (p *Preprocessor) preReplacer(t *token) (string, bool) {
+	ascii := p.p.state.flags&FlagASCII != 0
 
 	if p.isStr && !ascii {
 		// If the current pattern is a string and the ASCII mode is not enabled,

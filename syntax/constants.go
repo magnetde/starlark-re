@@ -1,9 +1,22 @@
-package re
+package syntax
 
 import "math"
 
+// Possible flags for the flag parameter.
 const (
-	MAXREPEAT = math.MaxInt // maximum repeat value of the regexp package
+	_ = 1 << iota // `re.TEMPLATE`; unused
+	FlagIgnoreCase
+	FlagLocale
+	FlagMultiline
+	FlagDotAll
+	FlagUnicode
+	FlagVerbose
+	FlagDebug
+	FlagASCII
+)
+
+const (
+	MAXREPEAT = math.MaxInt / 2
 	MAXGROUPS = 128
 )
 
