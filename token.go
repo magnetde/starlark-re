@@ -62,18 +62,23 @@ func (p *subPattern) dumpr(b *strings.Builder, level int) {
 
 		b.WriteString(strings.Repeat("  ", level))
 		b.WriteString(op.String())
-		dumpt(v, b, level)
+		dumpToken(v, b, level)
 	}
 }
 
-func dumpt(v *token, b *strings.Builder, level int) {
-	print := func(v ...any) {
-		b.WriteString(fmt.Sprint(v...))
-		b.WriteByte('\n')
+func dumpToken(v *token, b *strings.Builder, level int) {
+	printr := func(v ...any) {
+		for i, a := range v {
+			if i > 0 {
+				b.WriteByte(' ')
+			}
+			b.WriteString(fmt.Sprint(a))
+		}
 	}
 
-	printr := func(v ...any) {
-		b.WriteString(fmt.Sprint(v...))
+	print := func(v ...any) {
+		printr(v...)
+		b.WriteByte('\n')
 	}
 
 	printParams := func(av ...any) {
@@ -90,11 +95,7 @@ func dumpt(v *token, b *strings.Builder, level int) {
 				if !nl {
 					printr(" ")
 				}
-				if t, ok := a.(*token); ok {
-					dumpt(t, b, level)
-				} else {
-					printr(a)
-				}
+				printr(a)
 				nl = false
 			}
 		}
@@ -140,11 +141,11 @@ func dumpt(v *token, b *strings.Builder, level int) {
 		for _, v := range v.items {
 			op := v.opcode
 			printr(strings.Repeat("  ", level+1) + op.String() + " (")
-			dumpt(v, b, level)
+			dumpToken(v, b, level)
 			print(")")
 		}
 	case LITERAL, NOT_LITERAL:
-		print("'" + string(v.c) + "'")
+		print("", "'"+string(v.c)+"'")
 	case MIN_REPEAT, MAX_REPEAT, POSSESSIVE_REPEAT:
 		pv := v.params.(*paramRepeat)
 		printParams(pv.min, pv.max, pv.item)
@@ -153,10 +154,10 @@ func dumpt(v *token, b *strings.Builder, level int) {
 		printParams(pv.min, pv.max)
 	case SUBPATTERN:
 		pv := v.params.(*paramSubPattern)
-		printParams(pv.group, pv.addFlags, pv.delFlags, pv.p, pv.nonCapturing)
+		printParams(pv.group, pv.addFlags, pv.delFlags, pv.p)
 	case ATOMIC_GROUP:
-		print()
 		pv := v.params.(*paramSubPatterns)
+		print()
 		pv.p[0].dumpr(b, level+1)
 	}
 }
@@ -235,15 +236,14 @@ type (
 	paramRepeat struct {
 		min  int
 		max  int
-		item *token
+		item *subPattern
 	}
 
 	paramSubPattern struct {
-		group        int
-		addFlags     int
-		delFlags     int
-		p            *subPattern
-		nonCapturing bool
+		group    int
+		addFlags int
+		delFlags int
+		p        *subPattern
 	}
 )
 
@@ -317,7 +317,7 @@ func (p *paramRange) equals(o params) bool {
 
 func (p *paramRepeat) equals(o params) bool {
 	if pp, ok := o.(*paramRepeat); ok {
-		return p.min == pp.min && p.max == pp.max && p.item.equals(pp.item)
+		return p.min == pp.min && p.max == pp.max && p.item == pp.item
 	} else {
 		return false
 	}
@@ -418,7 +418,7 @@ func newRange(op opcode, min, max rune) *token {
 	}
 }
 
-func newRepeat(op opcode, min, max int, item *token) *token {
+func newRepeat(op opcode, min, max int, item *subPattern) *token {
 	return &token{
 		opcode: op,
 		params: &paramRepeat{

@@ -444,20 +444,28 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 			if isRepeatCode(item.opcode) {
 				return nil, errors.New("multiple repeat")
 			}
+
+			var subitem *subPattern
 			if item.opcode == SUBPATTERN {
 				p := item.params.(*paramSubPattern)
-				p.nonCapturing = false
+				if p.group == -1 && p.addFlags == 0 && p.delFlags == 0 {
+					subitem = p.p
+				}
+			}
+			if subitem == nil {
+				subitem = newSubpattern(state)
+				subitem.append(item)
 			}
 
 			if s.match('?') {
 				// Non-Greedy Match
-				subpattern.set(-1, newRepeat(MIN_REPEAT, min, max, item))
+				subpattern.set(-1, newRepeat(MIN_REPEAT, min, max, subitem))
 			} else if s.match('+') {
 				// Possessive Match (Always Greedy)
-				subpattern.set(-1, newRepeat(POSSESSIVE_REPEAT, min, max, item))
+				subpattern.set(-1, newRepeat(POSSESSIVE_REPEAT, min, max, subitem))
 			} else {
 				// Greedy Match
-				subpattern.set(-1, newRepeat(MAX_REPEAT, min, max, item))
+				subpattern.set(-1, newRepeat(MAX_REPEAT, min, max, subitem))
 			}
 
 		case '.':
@@ -726,7 +734,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 		if t.opcode == SUBPATTERN {
 			p := t.params.(*paramSubPattern)
 			if p.group == -1 && p.addFlags == 0 && p.delFlags == 0 {
-				p.nonCapturing = false
+				subpattern.set(i, p.p.get(0))
 			}
 		}
 	}
