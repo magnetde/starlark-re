@@ -817,7 +817,7 @@ func parseEscape(s *source, state *state, inCls bool) (*token, error) {
 		value := digit(c)
 
 		if !inCls {
-			if c1, ok := s.peek(); ok && isDigitC(c1) {
+			if c1, ok := s.peek(); ok && isDigit(c1) {
 				s.read()
 
 				if isOctDigit(c) && isOctDigit(c1) {
