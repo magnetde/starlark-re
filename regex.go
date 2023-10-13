@@ -25,7 +25,9 @@ type regexInput interface {
 }
 
 // input must be preprocessed
-func compileRegex(s string) (regexEngine, error) {
+func compileRegex(p *preprocessor, re2Fallback bool) (regexEngine, error) {
+	s := p.String()
+
 	r, err := regexp.Compile(s)
 	if err == nil {
 		re := &stdRegex{
@@ -33,17 +35,27 @@ func compileRegex(s string) (regexEngine, error) {
 			numCap: numCap(r),
 		}
 
-		return re, nil
+		// return re, nil
+		_ = re
 	}
 
-	r2, err := regexp2.Compile(s, 0) // flags are set by the preprocessor
-	if err == nil {
-		re := &advRegex{
-			re:     r2,
-			numCap: numCap2(r2),
-		}
+	// TODO: preprocessor should decide, which regex mwthod should be used
 
-		return re, nil
+	if re2Fallback {
+		s = p.String2()
+
+		var r2 *regexp2.Regexp
+		r2, err = regexp2.Compile(s, regexp2.RE2) // flags are set by the preprocessor
+		if err == nil {
+			// TODO: preprocess again
+
+			re := &advRegex{
+				re:     r2,
+				numCap: numCap2(r2),
+			}
+
+			return re, nil
+		}
 	}
 
 	return nil, err // return the second error

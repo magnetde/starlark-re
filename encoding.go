@@ -100,16 +100,11 @@ func isIdentifier(name string) bool {
 	return true
 }
 
-func isASCII(s string) bool {
-	for i := 0; i < len(s); i++ {
-		if s[i] > unicode.MaxASCII {
-			return false
-		}
-	}
-	return true
+func isASCIILetter(b byte) bool {
+	return ('a' <= b && b <= 'z') || ('A' <= b && b <= 'Z')
 }
 
-func isASCIILetter(b byte) bool {
+func isASCIILetterC(b rune) bool {
 	return ('a' <= b && b <= 'z') || ('A' <= b && b <= 'Z')
 }
 
@@ -121,8 +116,17 @@ func isOctDigit(b byte) bool {
 	return '0' <= b && b <= '7'
 }
 
+func isOctDigitC(b rune) bool {
+	return '0' <= b && b <= '7'
+}
+
 // precondition: b must be in set "0123456789"
 func digit(b byte) int {
+	return int(b) - '0'
+}
+
+// precondition: b must be in set "0123456789"
+func digitC(b rune) int {
 	return int(b) - '0'
 }
 
@@ -153,33 +157,6 @@ func unescapeLetter(c byte) (string, bool) {
 	}
 
 	return "", false
-}
-
-// parses the regex flags (e.g. (?i))
-// Very simple function, should only be called on valid regex.
-// TODO: should be expanded, to support more complex flags, e.g. (?im).
-func parseFlags(t string) int {
-	flags := 0
-
-	for len(t) >= 4 {
-		if t[0] == '(' && t[1] == '?' && t[3] == ')' {
-			switch t[2] {
-			case 'i':
-				flags |= reFlagIgnoreCase
-			case 'm':
-				flags |= reFlagMultiline
-			case 's':
-				flags |= reFlagDotAll
-			}
-
-			t = t[4:]
-			continue
-		}
-
-		t = t[1:]
-	}
-
-	return flags
 }
 
 var specialBytes = [16]byte{

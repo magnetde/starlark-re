@@ -38,7 +38,7 @@ func TestRe(t *testing.T) {
 	}
 
 	predeclared := starlark.StringDict{
-		"re": NewModule(),
+		"re": NewModule(true),
 	}
 
 	for name, fn := range asserts {

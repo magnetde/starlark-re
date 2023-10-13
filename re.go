@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"math/bits"
 	"slices"
 	"strconv"
 	"strings"
@@ -49,8 +48,9 @@ var zeroInt = starlark.MakeInt(0)
 type Module struct {
 	members starlark.StringDict
 
-	list  *list.List                 // Least recent used regexps
-	cache map[cacheKey]*list.Element // Mapping of patterns to list elements
+	list        *list.List                 // Least recent used regexps
+	cache       map[cacheKey]*list.Element // Mapping of patterns to list elements
+	re2Fallback bool                       // create regexp2 fallbacks
 }
 
 // cacheKey is a type, that is used for cache key, containing the pattern and the flags.
@@ -67,7 +67,7 @@ type cacheValue struct {
 }
 
 // NewModule creates a new re module with the given member dict.
-func NewModule() *Module {
+func NewModule(re2Fallback bool) *Module {
 	members := starlark.StringDict{
 		"A":          starlark.MakeInt(reFlagASCII),
 		"ASCII":      starlark.MakeInt(reFlagASCII),
@@ -101,9 +101,10 @@ func NewModule() *Module {
 	}
 
 	r := Module{
-		members: members,
-		list:    list.New(),
-		cache:   make(map[cacheKey]*list.Element),
+		members:     members,
+		list:        list.New(),
+		cache:       make(map[cacheKey]*list.Element),
+		re2Fallback: re2Fallback,
 	}
 
 	return &r
@@ -161,7 +162,7 @@ func (m *Module) compile(pattern strOrBytes, flags int) (*Pattern, error) {
 		m.list.Remove(last)
 	}
 
-	p, err := newPattern(pattern, flags)
+	p, err := newPattern(pattern, flags, m.re2Fallback)
 	if err != nil {
 		return nil, err
 	}
@@ -633,60 +634,17 @@ type Pattern struct {
 }
 
 // newPattern creates a new pattern object, which is also a Starlark value.
-func newPattern(pattern strOrBytes, flags int) (*Pattern, error) {
+func newPattern(pattern strOrBytes, flags int, re2Fallback bool) (*Pattern, error) {
 	p := pattern.value
 	isStr := pattern.isString
 
 	// replace unicode patterns, that are supported by Pathon but not supported by Go
-	p, err := preprocessRegex(p, isStr, flags&reFlagASCII != 0)
+	pp, err := newPreprocessor(p, isStr, flags)
 	if err != nil {
 		return nil, err
 	}
 
-	flags |= parseFlags(p) // TODO
-
-	// check for incompatible flags
-	if isStr {
-		if flags&reFlagLocale != 0 {
-			return nil, errors.New("cannot use LOCALE flag with a str pattern")
-		}
-		if flags&reFlagASCII == 0 {
-			flags |= reFlagUnicode
-		} else if flags&reFlagUnicode != 0 {
-			return nil, errors.New("ASCII and UNICODE flags are incompatible")
-		}
-	} else {
-		if flags&reFlagUnicode != 0 {
-			return nil, errors.New("cannot use UNICODE flag with a bytes pattern")
-		}
-		if flags&reFlagLocale != 0 && flags&reFlagASCII != 0 {
-			return nil, errors.New("ASCII and LOCALE flags are incompatible")
-		}
-	}
-
-	if flags&(reFlagIgnoreCase|reFlagMultiline|reFlagDotAll) != 0 {
-		var b strings.Builder
-		b.Grow(len(p) + 3 + bits.OnesCount(uint(flags)))
-
-		b.WriteString("(?")
-
-		if flags&reFlagIgnoreCase != 0 {
-			b.WriteByte('i')
-		}
-		if flags&reFlagMultiline != 0 {
-			b.WriteByte('m')
-		}
-		if flags&reFlagDotAll != 0 {
-			b.WriteByte('s')
-		}
-
-		b.WriteByte(')')
-		b.WriteString(p)
-
-		p = b.String()
-	}
-
-	re, err := compileRegex(p)
+	re, err := compileRegex(pp, re2Fallback)
 	if err != nil {
 		if e, ok := strings.CutPrefix(err.Error(), "error parsing regexp: "); ok {
 			err = errors.New(e)
@@ -702,15 +660,6 @@ func newPattern(pattern strOrBytes, flags int) (*Pattern, error) {
 	names := re.SubexpNames()
 	for i, name := range names {
 		if i != 0 && name != "" {
-			if j, ok := groups[name]; ok {
-				return nil, fmt.Errorf("redefinition of group name '%s' as group %d; was group %d", name, i, j)
-			}
-
-			// Names must be valid identifiers
-			if !isIdentifier(name) {
-				return nil, fmt.Errorf("bad character in group name '%s'", name)
-			}
-
 			groups[name] = i
 		}
 	}
