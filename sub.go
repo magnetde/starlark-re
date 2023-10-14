@@ -272,7 +272,7 @@ func extractGroup(r regexEngine, template string, isString bool) (index int, res
 
 	uindex, intErr := strconv.ParseUint(name, 10, 0)
 	if intErr != nil {
-		if !isIdentifier(name) {
+		if !util.IsIdentifier(name) {
 			err = fmt.Errorf("bad character in group name %s", util.QuoteString(name, isString, false))
 			return
 		}

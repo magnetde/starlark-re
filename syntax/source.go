@@ -3,7 +3,6 @@ package syntax
 import (
 	"fmt"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/magnetde/starlark-re/util"
@@ -139,22 +138,8 @@ func (s *source) checkgroupname(name string) error {
 	if !(s.isStr || util.IsASCIIString(name)) {
 		return fmt.Errorf("bad character in group name %s", util.QuoteString(name, s.isStr, false))
 	}
-	if !isIdentifier(name) {
+	if !util.IsIdentifier(name) {
 		return fmt.Errorf("bad character in group name %s", util.QuoteString(name, s.isStr, true))
 	}
 	return nil
-}
-
-func isIdentifier(name string) bool {
-	if name == "" {
-		return false
-	}
-
-	for i, c := range name {
-		if !unicode.IsLetter(c) && c != '_' && (i == 0 || !unicode.IsDigit(c)) {
-			return false
-		}
-	}
-
-	return true
 }
