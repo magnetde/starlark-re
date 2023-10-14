@@ -1,4 +1,4 @@
-package util
+package syntax
 
 type tableRange struct {
 	lo rune

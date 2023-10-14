@@ -3,12 +3,11 @@ package re
 import (
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"go.starlark.net/starlark"
 
-	"github.com/magnetde/starlark-re/util"
+	sre "github.com/magnetde/starlark-re/syntax"
 )
 
 type replacer interface {
@@ -22,13 +21,8 @@ type replacer interface {
 // If the replace string does not contain any references, the rule slice contains a single item,
 // representing a literal.
 type templateReplacer struct {
-	rules []templateRule
+	rules []sre.TemplateRule
 	match bool
-}
-
-type templateRule struct {
-	literal string
-	index   int // is -1 if template rule is literal
 }
 
 // Replacer for functions
@@ -48,10 +42,14 @@ func (r *templateReplacer) replace(m *Match) (string, error) {
 	var b strings.Builder
 
 	for _, t := range r.rules {
-		if t.index < 0 {
-			b.WriteString(t.literal)
+		if t.IsLiteral() {
+			b.WriteString(t.Literal)
 		} else {
-			g := m.groups[t.index]
+			if t.Index >= len(m.groups) {
+				return "", fmt.Errorf("invalid group reference %d", t.Index)
+			}
+
+			g := m.groups[t.Index]
 			if !g.empty() {
 				b.WriteString(g.str)
 			}
@@ -113,18 +111,18 @@ func getReplacer(thread *starlark.Thread, p *Pattern, r starlark.Value) (replace
 
 // if returned slice empty: contains no backreferences and is just a literal
 func newTemplateReplacer(r regexEngine, repl string, isString bool) (replacer, error) {
-	var rules []templateRule
+	var rules []sre.TemplateRule
 	withMatch := false
 
 	if !strings.ContainsRune(repl, '\\') { // check, if the template should be parsed
-		rules = []templateRule{{
-			literal: repl,
-			index:   -1,
+		rules = []sre.TemplateRule{{
+			Literal: repl,
+			Index:   -1,
 		}}
 	} else {
 		var err error
 
-		rules, err = parseTemplate(r, repl, isString)
+		rules, err = sre.ParseTemplate(r, repl, isString)
 		if err != nil {
 			return nil, err
 		}
@@ -138,159 +136,6 @@ func newTemplateReplacer(r regexEngine, repl string, isString bool) (replacer, e
 	}
 
 	return tr, nil
-}
-
-func parseTemplate(r regexEngine, template string, isString bool) ([]templateRule, error) {
-	var rules []templateRule
-
-	addLiteral := func(s string) {
-		if s != "" {
-			if len(rules) > 0 {
-				lastRule := &rules[len(rules)-1]
-
-				if lastRule.index < 0 { // if last rule is also a literal, then concat the strings
-					lastRule.literal += s
-					return
-				}
-			}
-
-			rules = append(rules, templateRule{literal: s, index: -1})
-		}
-	}
-
-	addIndex := func(i int) {
-		rules = append(rules, templateRule{index: i})
-	}
-
-	for len(template) > 0 {
-		before, rest, ok := strings.Cut(template, `\`)
-		if !ok {
-			break
-		}
-
-		addLiteral(before)
-
-		template = rest
-
-		if template == "" {
-			return nil, errors.New("bad escape (end of pattern)")
-		}
-
-		c := template[0]
-
-		template = template[1:]
-
-		switch c {
-		case 'g': // group found
-			index, rest, err := extractGroup(r, template, isString)
-			if err != nil {
-				return nil, err
-			}
-
-			template = rest
-
-			addIndex(index)
-		case '0': // octal string
-			chr := 0
-
-			if len(template) > 0 && isOctDigit(template[0]) {
-				chr = util.Digit(template[0])
-
-				if len(template) > 1 && isOctDigit(template[1]) {
-					chr = 8*chr + util.Digit(template[1])
-					template = template[2:]
-				} else {
-					template = template[1:]
-				}
-			}
-
-			addLiteral(string(rune(chr)))
-		case '1', '2', '3', '4', '5', '6', '7', '8', '9': // index or octal string
-			index := util.Digit(c)
-
-			if len(template) > 0 && util.IsDigit(template[0]) {
-				if isOctDigit(c) && isOctDigit(template[0]) &&
-					len(template) > 1 && isOctDigit(template[1]) {
-
-					index = 8*(8*index+util.Digit(template[0])) + util.Digit(template[1])
-					if index > 0o377 {
-						return nil, fmt.Errorf(`octal escape value \%s outside of range 0-0o377`, string(c)+template[:2])
-					}
-
-					template = template[2:]
-
-					addLiteral(string(rune(index)))
-					break // break out of case
-				}
-
-				index = 10*index + util.Digit(template[0])
-				template = template[1:]
-			}
-
-			// not octal
-			if index >= r.NumSubexp() {
-				return nil, fmt.Errorf("invalid group reference %d", index)
-			}
-
-			addIndex(index)
-		default:
-			if escape, ok := unescapeLetter(c); ok {
-				addLiteral(escape)
-			} else {
-				if isASCIILetter(c) {
-					return nil, fmt.Errorf("bad escape \\%c", c)
-				}
-
-				addLiteral(`\`)
-				addLiteral(string(c))
-			}
-		}
-	}
-
-	addLiteral(template)
-
-	return rules, nil
-}
-
-func extractGroup(r regexEngine, template string, isString bool) (index int, rest string, err error) {
-	if template == "" || template[0] != '<' {
-		err = errors.New("missing <")
-		return
-	}
-
-	name, rest, ok := strings.Cut(template[1:], ">")
-
-	if name == "" { // check first, if the name is empty to match Python errors
-		err = errors.New("missing group name")
-		return
-	}
-
-	if !ok {
-		err = errors.New("missing >, unterminated name")
-		return
-	}
-
-	uindex, intErr := strconv.ParseUint(name, 10, 0)
-	if intErr != nil {
-		if !util.IsIdentifier(name) {
-			err = fmt.Errorf("bad character in group name %s", util.QuoteString(name, isString, false))
-			return
-		}
-
-		index = r.SubexpIndex(name)
-		if index < 0 {
-			err = fmt.Errorf("unknown group name '%s'", name)
-			return
-		}
-	} else {
-		index = int(uindex)
-		if index >= r.NumSubexp() {
-			err = fmt.Errorf("invalid group reference %d", index)
-			return
-		}
-	}
-
-	return
 }
 
 func sub(p *Pattern, r replacer, str strOrBytes, count int, subn bool) (starlark.Value, error) {

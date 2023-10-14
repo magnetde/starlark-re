@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"strings"
 	"unicode/utf8"
-
-	"github.com/magnetde/starlark-re/util"
 )
 
 type source struct {
@@ -96,11 +94,11 @@ func (s *source) match(c rune) bool {
 func (s *source) nextInt() int {
 	i := 0
 	for len(s.s) > 0 {
-		if !util.IsDigit(s.s[0]) {
+		if !isDigitByte(s.s[0]) {
 			break
 		}
 
-		i = 10*i + util.Digit(s.s[0])
+		i = 10*i + digitByte(s.s[0])
 		s.s = s.s[1:]
 	}
 
@@ -132,14 +130,4 @@ func (s *source) nextFunc(n int, fn func(r rune) bool) string {
 	s.s = s.s[e:]
 
 	return res
-}
-
-func (s *source) checkgroupname(name string) error {
-	if !(s.isStr || util.IsASCIIString(name)) {
-		return fmt.Errorf("bad character in group name %s", util.QuoteString(name, s.isStr, false))
-	}
-	if !util.IsIdentifier(name) {
-		return fmt.Errorf("bad character in group name %s", util.QuoteString(name, s.isStr, true))
-	}
-	return nil
 }

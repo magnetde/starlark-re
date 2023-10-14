@@ -1,11 +1,6 @@
 package re
 
-import (
-	"unicode"
-	"unicode/utf8"
-
-	"github.com/magnetde/starlark-re/util"
-)
+import "unicode/utf8"
 
 func isOctDigit(b byte) bool {
 	return '0' <= b && b <= '7'
@@ -13,54 +8,6 @@ func isOctDigit(b byte) bool {
 
 func isASCIILetter(b byte) bool {
 	return ('a' <= b && b <= 'z') || ('A' <= b && b <= 'Z')
-}
-
-func isIdentifier(name string) bool {
-	if name == "" {
-		return false
-	}
-
-	for i := 0; i < len(name); i++ {
-		c := name[i]
-		if c > unicode.MaxASCII {
-			return false
-		}
-
-		if !isASCIILetter(c) && c != '_' && (i == 0 || !util.IsDigit(c)) {
-			return false
-		}
-	}
-
-	return true
-}
-
-func unescapeLetter(c byte) (string, bool) {
-	var value string
-
-	switch c {
-	case 'a':
-		value = "\a"
-	case 'b':
-		value = "\b"
-	case 'f':
-		value = "\f"
-	case 'n':
-		value = "\n"
-	case 'r':
-		value = "\r"
-	case 't':
-		value = "\t"
-	case 'v':
-		value = "\v"
-	case '\\':
-		value = "\\"
-	}
-
-	if value != "" {
-		return value, true
-	}
-
-	return "", false
 }
 
 var specialBytes = [16]byte{

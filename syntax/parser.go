@@ -491,7 +491,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 							return nil, err
 						}
 
-						err = s.checkgroupname(name)
+						err = checkgroupname(name, s.isStr)
 						if err != nil {
 							return nil, err
 						}
@@ -502,7 +502,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 							return nil, err
 						}
 
-						err = s.checkgroupname(name)
+						err = checkgroupname(name, s.isStr)
 						if err != nil {
 							return nil, err
 						}
@@ -601,7 +601,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 					}
 
 					if !(isDigitString(condname) && util.IsASCIIString(condname)) {
-						err = s.checkgroupname(condname)
+						err = checkgroupname(condname, s.isStr)
 						if err != nil {
 							return nil, err
 						}

@@ -1,7 +1,6 @@
 package util
 
 import (
-	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -20,47 +19,6 @@ func IsASCIIString(s string) bool {
 		}
 	}
 	return true
-}
-
-func IsDigit(b byte) bool {
-	return '0' <= b && b <= '9'
-}
-
-// precondition: b must be in set "0123456789"
-func Digit(b byte) int {
-	return int(b) - '0'
-}
-
-func IsIdentifier(name string) bool {
-	if name == "" {
-		return false
-	}
-
-	for i, c := range name {
-		if i == 0 {
-			if !inTable(c, xidStartTable[:]) {
-				return false
-			}
-		} else if !inTable(c, xidContinueTable[:]) {
-			return false
-		}
-	}
-
-	return true
-}
-
-func inTable(c rune, table []tableRange) bool {
-	_, ok := slices.BinarySearchFunc(table, c, func(r tableRange, v rune) int {
-		if r.lo > c {
-			return +1
-		} else if r.hi < c {
-			return -1
-		} else {
-			return 0
-		}
-	})
-
-	return ok
 }
 
 func QuoteString(s string, isString bool, bprefix bool) string {
