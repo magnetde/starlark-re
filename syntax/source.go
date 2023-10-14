@@ -73,11 +73,11 @@ func (s *source) skipUntil(sep string) {
 
 func (s *source) getUntil(c rune, name string) (string, error) {
 	pre, rest, ok := strings.Cut(s.s, string(c))
-	if !ok {
-		return "", fmt.Errorf("missing %c, unterminated name", c)
-	}
 	if pre == "" {
 		return "", fmt.Errorf("missing %s", name)
+	}
+	if !ok {
+		return "", fmt.Errorf("missing %c, unterminated name", c)
 	}
 
 	s.s = rest

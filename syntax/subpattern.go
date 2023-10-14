@@ -22,6 +22,7 @@ func newSubpattern(state *state) *subPattern {
 func (p *subPattern) append(t *token) {
 	p.data = append(p.data, t)
 }
+
 func (p *subPattern) len() int {
 	return len(p.data)
 }
@@ -30,6 +31,7 @@ func (p *subPattern) get(i int) *token {
 	i = p.index(i)
 	return p.data[i]
 }
+
 func (p *subPattern) index(i int) int {
 	if i < 0 {
 		i += len(p.data)
@@ -45,6 +47,12 @@ func (p *subPattern) del(i int) {
 func (p *subPattern) set(i int, t *token) {
 	i = p.index(i)
 	p.data[i] = t
+}
+
+func (p *subPattern) replace(i int, sp *subPattern) {
+	i = p.index(i)
+	p.data = slices.Delete(p.data, i, i+1)
+	p.data = slices.Insert(p.data, i, sp.data...)
 }
 
 // isUnsupported returns, whether the subpattern is unsupported by the std regexp engine.
@@ -241,12 +249,12 @@ type subPatternWriter struct {
 func (w *subPatternWriter) writePattern(p *subPattern) {
 	for _, item := range p.data {
 		if !w.replace(w, item) {
-			w.writeToken(item)
+			w.writeToken(item, len(p.data) > 1)
 		}
 	}
 }
 
-func (w *subPatternWriter) writeToken(t *token) {
+func (w *subPatternWriter) writeToken(t *token, hasSiblings bool) {
 	switch t.opcode {
 	case ANY:
 		w.WriteByte('.')
@@ -290,11 +298,19 @@ func (w *subPatternWriter) writeToken(t *token) {
 	case BRANCH:
 		p := t.params.(*paramSubPatterns)
 
+		// Always wrap branches branches inside of an non-capture group, if the current
+		// subpattern contains other token, than this branch token.
+		if hasSiblings {
+			w.WriteString("(?:")
+		}
 		for i, item := range p.items {
 			if i > 0 {
 				w.WriteByte('|')
 			}
 			w.writePattern(item)
+		}
+		if hasSiblings {
+			w.WriteByte(')')
 		}
 	case CATEGORY:
 		w.writeCategory(t)

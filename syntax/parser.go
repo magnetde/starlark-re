@@ -162,7 +162,7 @@ func parseSub(s *source, state *state, verbose bool, nested int) (*subPattern, e
 		return items[0], nil
 	}
 
-	subpattern := newSubpattern(state)
+	sp := newSubpattern(state)
 
 	// check if all items share a common prefix
 	for {
@@ -188,7 +188,7 @@ func parseSub(s *source, state *state, verbose bool, nested int) (*subPattern, e
 			for _, item := range items {
 				item.del(0)
 			}
-			subpattern.append(prefix)
+			sp.append(prefix)
 			continue // check next one
 		}
 
@@ -219,12 +219,12 @@ func parseSub(s *source, state *state, verbose bool, nested int) (*subPattern, e
 	if appendSub {
 		// we can store this as a character set instead of a
 		// branch (the compiler may optimize this even more)
-		subpattern.append(newItemsToken(IN, unique(set)))
-		return subpattern, nil
+		sp.append(newItemsToken(IN, unique(set)))
+	} else {
+		sp.append(newSubPatternsToken(BRANCH, items))
 	}
 
-	subpattern.append(newSubPatternsToken(BRANCH, items))
-	return subpattern, nil
+	return sp, nil
 }
 
 func unique(items []*token) []*token {
@@ -259,7 +259,7 @@ func unique(items []*token) []*token {
 func parseInternal(s *source, state *state, verbose bool, nested int, first bool) (*subPattern, error) {
 	// parse a simple pattern
 
-	subpattern := newSubpattern(state)
+	sp := newSubpattern(state)
 
 	var err error
 	for {
@@ -287,7 +287,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 
 		switch c {
 		default:
-			subpattern.append(newLiteral(c))
+			sp.append(newLiteral(c))
 		// ')', '|' already handled
 		case '\\':
 			token, err := parseEscape(s, state, false /* not class */)
@@ -295,7 +295,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 				return nil, err
 			}
 
-			subpattern.append(token)
+			sp.append(token)
 		case '[':
 			negate := s.match('^')
 
@@ -370,9 +370,9 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 
 			if len(set) == 1 && set[0].opcode == LITERAL {
 				if negate {
-					subpattern.append(newCharToken(NOT_LITERAL, set[0].c))
+					sp.append(newCharToken(NOT_LITERAL, set[0].c))
 				} else {
-					subpattern.append(set[0])
+					sp.append(set[0])
 				}
 			} else {
 				if negate {
@@ -381,7 +381,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 
 				// charmap optimization can't be added here because
 				// global flags still are not known
-				subpattern.append(newItemsToken(IN, set))
+				sp.append(newItemsToken(IN, set))
 			}
 
 		case '*', '+', '?', '{':
@@ -398,7 +398,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 				min, max = 1, MAXREPEAT
 			case '{':
 				if next, ok := s.peek(); ok && next == '}' {
-					subpattern.append(newLiteral(c))
+					sp.append(newLiteral(c))
 					continue
 				}
 
@@ -411,7 +411,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 				}
 
 				if !s.match('}') {
-					subpattern.append(newLiteral(c))
+					sp.append(newLiteral(c))
 					s.restore(here)
 					continue
 				}
@@ -431,8 +431,8 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 
 			// figure out which item to repeat
 			var item *token
-			if subpattern.len() > 0 {
-				item = subpattern.get(-1)
+			if sp.len() > 0 {
+				item = sp.get(-1)
 			}
 			if item == nil || item.opcode == AT {
 				return nil, errors.New("nothing to repeat")
@@ -455,17 +455,17 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 
 			if s.match('?') {
 				// Non-Greedy Match
-				subpattern.set(-1, newRepeat(MIN_REPEAT, min, max, subitem))
+				sp.set(-1, newRepeat(MIN_REPEAT, min, max, subitem))
 			} else if s.match('+') {
 				// Possessive Match (Always Greedy)
-				subpattern.set(-1, newRepeat(POSSESSIVE_REPEAT, min, max, subitem))
+				sp.set(-1, newRepeat(POSSESSIVE_REPEAT, min, max, subitem))
 			} else {
 				// Greedy Match
-				subpattern.set(-1, newRepeat(MAX_REPEAT, min, max, subitem))
+				sp.set(-1, newRepeat(MAX_REPEAT, min, max, subitem))
 			}
 
 		case '.':
-			subpattern.append(newEmptyToken(ANY))
+			sp.append(newEmptyToken(ANY))
 
 		case '(':
 			capture := true
@@ -520,7 +520,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 							return nil, err
 						}
 
-						subpattern.append(newGrouprefToken(GROUPREF, gid))
+						sp.append(newGrouprefToken(GROUPREF, gid))
 						continue
 
 					} else {
@@ -584,11 +584,11 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 					}
 
 					if char == '=' {
-						subpattern.append(newAssertToken(ASSERT, dir, p))
+						sp.append(newAssertToken(ASSERT, dir, p))
 					} else if p.len() > 0 {
-						subpattern.append(newAssertToken(ASSERT_NOT, dir, p))
+						sp.append(newAssertToken(ASSERT_NOT, dir, p))
 					} else {
-						subpattern.append(newEmptyToken(FAILURE))
+						sp.append(newEmptyToken(FAILURE))
 					}
 
 					continue
@@ -655,7 +655,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 						return nil, errors.New("missing ), unterminated subpattern")
 					}
 
-					subpattern.append(newGrouprefExistsToken(GROUPREF_EXISTS, condgroup, itemYes, itemNo))
+					sp.append(newGrouprefExistsToken(GROUPREF_EXISTS, condgroup, itemYes, itemNo))
 					continue
 
 				case '>':
@@ -671,7 +671,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 						}
 
 						if !ok { // global flags
-							if !first || subpattern.len() > 0 {
+							if !first || sp.len() > 0 {
 								return nil, errors.New("global flags not at the start of the expression")
 							}
 
@@ -712,30 +712,30 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 			}
 
 			if atomic {
-				subpattern.append(newWithSubPattern(ATOMIC_GROUP, p))
+				sp.append(newWithSubPattern(ATOMIC_GROUP, p))
 			} else {
-				subpattern.append(newSubPattern(SUBPATTERN, group, addFlags, delFlags, p))
+				sp.append(newSubPattern(SUBPATTERN, group, addFlags, delFlags, p))
 			}
 
 		case '^':
-			subpattern.append(newAtToken(AT, AT_BEGINNING))
+			sp.append(newAtToken(AT, AT_BEGINNING))
 		case '$':
-			subpattern.append(newAtToken(AT, AT_END))
+			sp.append(newAtToken(AT, AT_END))
 		}
 	}
 
 	// unpack non-capturing groups
-	for i := subpattern.len() - 1; i >= 0; i-- {
-		t := subpattern.get(i)
+	for i := sp.len() - 1; i >= 0; i-- {
+		t := sp.get(i)
 		if t.opcode == SUBPATTERN {
 			p := t.params.(*paramSubPattern)
 			if p.group == -1 && p.addFlags == 0 && p.delFlags == 0 {
-				subpattern.set(i, p.p.get(0))
+				sp.replace(i, p.p)
 			}
 		}
 	}
 
-	return subpattern, nil
+	return sp, nil
 }
 
 func parseEscape(s *source, state *state, inCls bool) (*token, error) {

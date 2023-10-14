@@ -172,37 +172,26 @@ func (p *Preprocessor) fallbackReplacer(w *subPatternWriter, t *token) bool {
 	if t.opcode == SUBPATTERN {
 		p := t.params.(*paramSubPattern)
 
-		w.WriteByte('(')
+		// The preprocessor must only write subpatterns differently,
+		// that have a group name.
 
-		if p.group >= 0 {
-			groupName := groupname(p.p, p.group)
-			if groupName != "" {
-				w.WriteString("?<") // No ? before P
-				w.WriteString(groupName)
-				w.WriteByte('>')
-			}
-		} else if p.addFlags != 0 || p.delFlags != 0 {
-			// Flags can only appear, when no group name exists
-
-			w.WriteByte('?')
-			if p.addFlags != 0 {
-				w.writeFlags(p.addFlags)
-			}
-			if p.delFlags != 0 {
-				w.WriteByte('-')
-				w.writeFlags(p.addFlags)
-			}
-
-			if p.p.len() > 0 {
-				w.WriteByte(':')
-			}
+		if p.group < 0 {
+			return false
 		}
 
+		groupName := groupname(p.p, p.group)
+		if groupName == "" {
+			return false
+		}
+
+		w.WriteString("(?<") // No ? before P
+		w.WriteString(groupName)
+		w.WriteByte('>')
 		if p.p.len() > 0 {
 			w.writePattern(p.p)
 		}
-
 		w.WriteByte(')')
+
 		return true
 	}
 
