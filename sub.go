@@ -284,7 +284,7 @@ func extractGroup(r regexEngine, template string, isString bool) (index int, res
 		}
 	} else {
 		index = int(uindex)
-		if index > r.NumSubexp() {
+		if index >= r.NumSubexp() {
 			err = fmt.Errorf("invalid group reference %d", index)
 			return
 		}
