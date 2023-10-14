@@ -16,8 +16,8 @@ const (
 )
 
 const (
-	MAXREPEAT = math.MaxInt / 2
-	MAXGROUPS = 128
+	MAXREPEAT = math.MaxInt
+	MAXGROUPS = math.MaxInt / 2
 )
 
 // To install stringer: go install golang.org/x/tools/cmd/stringer@latest

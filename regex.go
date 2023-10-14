@@ -274,7 +274,7 @@ func (r *advRegex) BuildInput(s string) regexInput {
 }
 
 func getRuneOffsets(s string) ([]rune, []int, []int) {
-	if util.IsASCII(s) { // if the string has only ASCII characters, offsets are not necessary
+	if util.IsASCIIString(s) { // if the string has only ASCII characters, offsets are not necessary
 		return []rune(s), nil, nil
 	}
 

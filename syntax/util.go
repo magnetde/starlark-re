@@ -1,7 +1,6 @@
 package syntax
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 
@@ -94,11 +93,4 @@ func isRepeatCode(o opcode) bool {
 	default:
 		return false
 	}
-}
-
-func checkgroupname(name string) error {
-	if !util.IsIdentifier(name) {
-		return fmt.Errorf("bad character in group name '%s'", name)
-	}
-	return nil
 }

@@ -12,31 +12,12 @@ var (
 	hexChars      = "0123456789abcdef"
 )
 
-func IsASCII(s string) bool {
+func IsASCIIString(s string) bool {
 	for i := 0; i < len(s); i++ {
 		if s[i] > unicode.MaxASCII {
 			return false
 		}
 	}
-	return true
-}
-
-func IsIdentifier(name string) bool {
-	if name == "" {
-		return false
-	}
-
-	for i := 0; i < len(name); i++ {
-		c := name[i]
-		if c > unicode.MaxASCII {
-			return false
-		}
-
-		if !IsASCIILetter(c) && c != '_' && (i == 0 || !IsDigit(c)) {
-			return false
-		}
-	}
-
 	return true
 }
 
@@ -47,10 +28,6 @@ func IsDigit(b byte) bool {
 // precondition: b must be in set "0123456789"
 func Digit(b byte) int {
 	return int(b) - '0'
-}
-
-func IsASCIILetter(b byte) bool {
-	return ('a' <= b && b <= 'z') || ('A' <= b && b <= 'Z')
 }
 
 func QuoteString(s string, isString bool, bprefix bool) string {

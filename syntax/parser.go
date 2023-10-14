@@ -491,7 +491,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 							return nil, err
 						}
 
-						err = checkgroupname(name)
+						err = s.checkgroupname(name)
 						if err != nil {
 							return nil, err
 						}
@@ -502,7 +502,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 							return nil, err
 						}
 
-						err = checkgroupname(name)
+						err = s.checkgroupname(name)
 						if err != nil {
 							return nil, err
 						}
@@ -600,8 +600,8 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 						return nil, err
 					}
 
-					if !(isDigitString(condname) && util.IsASCII(condname)) {
-						err = checkgroupname(condname)
+					if !(isDigitString(condname) && util.IsASCIIString(condname)) {
+						err = s.checkgroupname(condname)
 						if err != nil {
 							return nil, err
 						}
@@ -623,7 +623,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 						if _, ok = state.grouprefpos[condgroup]; !ok {
 							state.grouprefpos[condgroup] = s.tell() - len(condname) - 1
 						}
-						if !(isDigitString(condname) && util.IsASCII(condname)) {
+						if !(isDigitString(condname) && util.IsASCIIString(condname)) {
 							return nil, fmt.Errorf("bad character in group name %s", util.QuoteString(condname, s.isStr, false))
 						}
 					}

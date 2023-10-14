@@ -237,7 +237,7 @@ func parseTemplate(r regexEngine, template string, isString bool) ([]templateRul
 			if escape, ok := unescapeLetter(c); ok {
 				addLiteral(escape)
 			} else {
-				if util.IsASCIILetter(c) {
+				if isASCIILetter(c) {
 					return nil, fmt.Errorf("bad escape \\%c", c)
 				}
 
@@ -272,7 +272,7 @@ func extractGroup(r regexEngine, template string, isString bool) (index int, res
 
 	uindex, intErr := strconv.ParseUint(name, 10, 0)
 	if intErr != nil {
-		if !util.IsIdentifier(name) {
+		if !isIdentifier(name) {
 			err = fmt.Errorf("bad character in group name %s", util.QuoteString(name, isString, false))
 			return
 		}

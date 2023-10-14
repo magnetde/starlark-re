@@ -31,8 +31,8 @@ func (p *Preprocessor) Flags() int {
 	return p.p.state.flags
 }
 
-func (p *Preprocessor) HasBackrefs() bool {
-	return p.p.hasBackrefs()
+func (p *Preprocessor) IsUnsupported() bool {
+	return p.p.isUnsupported()
 }
 
 func (p *Preprocessor) String() string {
