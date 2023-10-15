@@ -298,12 +298,16 @@ func regexpSearch(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Value, 
 		return nil, err
 	}
 
-	indx := findMatch(p.re, str.value, pos)
-	if indx == nil {
+	match, err := findMatch(p.re, str.value, pos)
+	if err != nil {
+		return nil, err
+	}
+
+	if match == nil {
 		return starlark.None, nil
 	}
 
-	return newMatch(p, str, indx, 0, len(str.value)), nil
+	return newMatch(p, str, match, 0, len(str.value)), nil
 }
 
 // checkParams, checks, if the parameter `str` matches the expected type.
@@ -360,7 +364,11 @@ func regexpMatch(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Value, e
 		return nil, err
 	}
 
-	match := findMatch(p.re, str.value, pos)
+	match, err := findMatch(p.re, str.value, pos)
+	if err != nil {
+		return nil, err
+	}
+
 	if match == nil || (len(match) > 0 && match[0] != pos) {
 		return starlark.None, nil
 	}
@@ -398,7 +406,11 @@ func regexpFullmatch(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Valu
 		return nil, err
 	}
 
-	match := findLongestMatch(p.re, str.value, pos)
+	match, err := findLongestMatch(p.re, str.value, pos)
+	if err != nil {
+		return nil, err
+	}
+
 	if match == nil || len(match) < 2 {
 		return starlark.None, nil
 	}
@@ -437,7 +449,7 @@ func regexpSplit(p *Pattern, str strOrBytes, maxSplit int) (starlark.Value, erro
 		return nil, err
 	}
 
-	return split(p, str, maxSplit), nil
+	return split(p, str, maxSplit)
 }
 
 // reFindAll returns all non-overlapping matches of pattern in string, as a list of strings or tuples.
@@ -473,7 +485,7 @@ func regexpFindall(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Value,
 	s := str.value
 	var l []starlark.Value
 
-	findMatches(p.re, s, pos, 0, func(match []int) bool {
+	err = findMatches(p.re, s, pos, 0, func(match []int) error {
 		n := len(match) / 2
 
 		var v starlark.Value
@@ -502,8 +514,11 @@ func regexpFindall(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Value,
 		}
 
 		l = append(l, v)
-		return true
+		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	return starlark.NewList(l), nil
 }
@@ -537,10 +552,13 @@ func regexpFinditer(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Value
 
 	var l []starlark.Value
 
-	findMatches(p.re, str.value, pos, 0, func(match []int) bool {
+	err = findMatches(p.re, str.value, pos, 0, func(match []int) error {
 		l = append(l, newMatch(p, str, match, 0, len(str.value)))
-		return true
+		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	return starlark.NewList(l), nil
 }
