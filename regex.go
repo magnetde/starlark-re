@@ -25,7 +25,7 @@ type regexEngine interface {
 }
 
 type regexInput interface {
-	Find(pos int, longest bool, dstCap []int) []int
+	Find(pos int, longest bool, dstCap []int) ([]int, error)
 }
 
 // input must be preprocessed
@@ -203,7 +203,7 @@ func replaceInvalidChars(s string) (string, []int) {
 //go:linkname doExecute regexp.(*Regexp).doExecute
 func doExecute(re *regexp.Regexp, r io.RuneReader, b []byte, s string, pos int, ncap int, dstCap []int) []int
 
-func (i *stdInput) Find(pos int, longest bool, dstCap []int) []int {
+func (i *stdInput) Find(pos int, longest bool, dstCap []int) ([]int, error) {
 	re := i.re.re
 	if longest {
 		re = re.Copy()
@@ -213,7 +213,7 @@ func (i *stdInput) Find(pos int, longest bool, dstCap []int) []int {
 	a := i.pad(doExecute(re, nil, nil, i.str, pos, i.re.numCap, dstCap))
 
 	applyOffsets(a, i.offsets)
-	return a
+	return a, nil
 }
 
 func (i *stdInput) pad(a []int) []int {
@@ -312,18 +312,18 @@ func getRuneOffsets(s string) ([]rune, []int, []int) {
 	return chars, offsetsRune, offsetsByte
 }
 
-func (i *advInput) Find(pos int, longest bool, dstCap []int) []int {
+func (i *advInput) Find(pos int, longest bool, dstCap []int) ([]int, error) {
 	if i.offsetsRune != nil {
 		pos = i.offsetsRune[pos]
 	}
 
 	m, err := i.re.re.FindRunesMatchStartingAt(i.chars, pos)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	if m == nil {
-		return nil
+		return nil, nil
 	}
 
 	groups := m.Groups()
@@ -338,5 +338,5 @@ func (i *advInput) Find(pos int, longest bool, dstCap []int) []int {
 	}
 
 	applyOffsets(a, i.offsetsByte)
-	return a
+	return a, nil
 }

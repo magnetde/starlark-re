@@ -138,13 +138,12 @@ func sub(p *Pattern, r replacer, str strOrBytes, count int, subn bool) (starlark
 	s := str.value
 
 	var replaced strings.Builder
-	var err error
 
 	matches := 0
 	beg := 0
 	end := 0
 
-	findMatches(p.re, s, 0, count, func(match []int) bool {
+	err := findMatches(p.re, s, 0, count, func(match []int) error {
 		end = match[0]
 
 		replaced.WriteString(s[beg:end])
@@ -154,17 +153,16 @@ func sub(p *Pattern, r replacer, str strOrBytes, count int, subn bool) (starlark
 			m = newMatch(p, str, match, 0, len(str.value))
 		}
 
-		r, er := r.replace(m) // assign the outer error
-		if er != nil {
-			err = er
-			return false
+		r, err := r.replace(m) // assign the outer error
+		if err != nil {
+			return err
 		}
 
 		replaced.WriteString(r)
 		matches++
 
 		beg = match[1]
-		return true
+		return nil
 	})
 	if err != nil {
 		return nil, err

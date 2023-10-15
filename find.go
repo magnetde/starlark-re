@@ -5,12 +5,12 @@ import (
 )
 
 // Replacement for `FindStringSubmatchIndex`, to specify a starting position.
-func findMatch(r regexEngine, s string, pos int) []int {
+func findMatch(r regexEngine, s string, pos int) ([]int, error) {
 	in := r.BuildInput(s)
 	return in.Find(pos, false, nil)
 }
 
-func findLongestMatch(r regexEngine, s string, pos int) []int {
+func findLongestMatch(r regexEngine, s string, pos int) ([]int, error) {
 	in := r.BuildInput(s)
 	return in.Find(pos, true /* find longest */, nil)
 }
@@ -19,7 +19,7 @@ func findLongestMatch(r regexEngine, s string, pos int) []int {
 // Needs a special implementation, `FindAllStringSubmatchIndex` removes empty matches right after a prevous match.
 // Is necessary because python includes empty matches right after a previous match.
 // The deliver function must not modify the match.
-func findMatches(r regexEngine, s string, pos int, n int, deliver func(a []int) bool) {
+func findMatches(r regexEngine, s string, pos int, n int, deliver func(a []int) error) error {
 	if n <= 0 {
 		n = len(s) + 1
 	}
@@ -37,15 +37,20 @@ func findMatches(r regexEngine, s string, pos int, n int, deliver func(a []int) 
 
 	var dstCap [2]int
 	for i := 0; i < n && pos <= end; {
-		a := in.Find(pos, !firstPass, dstCap[:0])
+		a, err := in.Find(pos, !firstPass, dstCap[:0])
+		if err != nil {
+			return err
+		}
+
 		if len(a) == 0 {
 			break
 		}
 
 		// If the last match was different from the current:
 		if a[0] != lastMatch[0] || a[1] != lastMatch[1] {
-			if !deliver(a) {
-				return
+			err = deliver(a)
+			if err != nil {
+				return err
 			}
 
 			copy(lastMatch[:], a[:2])
@@ -76,4 +81,6 @@ func findMatches(r regexEngine, s string, pos int, n int, deliver func(a []int) 
 			pos = a[1]
 		}
 	}
+
+	return nil
 }
