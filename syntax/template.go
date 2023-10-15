@@ -41,8 +41,13 @@ func ParseTemplate(s Indexer, template string, isString bool) ([]TemplateRule, e
 		}
 	}
 
-	addIndex := func(i int) {
+	addIndex := func(i int) error {
+		if i >= s.NumSubexp() {
+			return fmt.Errorf("invalid group reference %d", i)
+		}
+
 		rules = append(rules, TemplateRule{Index: i})
+		return nil
 	}
 
 	for len(template) > 0 {
@@ -72,7 +77,10 @@ func ParseTemplate(s Indexer, template string, isString bool) ([]TemplateRule, e
 
 			template = rest
 
-			addIndex(index)
+			err = addIndex(index)
+			if err != nil {
+				return nil, err
+			}
 		case '0': // octal string
 			chr := 0
 
@@ -110,12 +118,10 @@ func ParseTemplate(s Indexer, template string, isString bool) ([]TemplateRule, e
 				template = template[1:]
 			}
 
-			// not octal
-			if index >= s.NumSubexp() {
-				return nil, fmt.Errorf("invalid group reference %d", index)
+			err := addIndex(index)
+			if err != nil {
+				return nil, err
 			}
-
-			addIndex(index)
 		default:
 			if escape, ok := unescapeLetter(c); ok {
 				addLiteral(escape)
@@ -153,7 +159,7 @@ func extractGroup(s Indexer, template string, isString bool) (index int, rest st
 		return
 	}
 
-	if !(isDigitString(name) && util.IsASCIIString(name)) {
+	if uindex, e := strconv.ParseUint(name, 10, 32); e != nil {
 		err = checkgroupname(name, isString)
 		if err != nil {
 			return
@@ -165,15 +171,12 @@ func extractGroup(s Indexer, template string, isString bool) (index int, rest st
 			return
 		}
 	} else {
-		index, err = strconv.Atoi(name)
-		if err != nil {
-			return
-		}
-
-		if index >= MAXGROUPS {
+		if uindex >= MAXGROUPS {
 			err = fmt.Errorf("invalid group reference %d", index)
 			return
 		}
+
+		index = int(uindex)
 	}
 
 	return

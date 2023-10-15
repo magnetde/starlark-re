@@ -307,6 +307,8 @@ func getRuneOffsets(s string) ([]rune, []int, []int) {
 		s = s[size:] // if the rune is not valid, the size returned is 1, so slicing with `size` is correct
 	}
 
+	offsetsByte = append(offsetsByte, offsetO)
+
 	return chars, offsetsRune, offsetsByte
 }
 
@@ -328,7 +330,11 @@ func (i *advInput) Find(pos int, longest bool, dstCap []int) []int {
 	a := make([]int, 0, 2*len(groups))
 
 	for _, g := range groups {
-		a = append(a, g.Index, g.Index+g.Length)
+		if len(g.Captures) != 0 {
+			a = append(a, g.Index, g.Index+g.Length)
+		} else {
+			a = append(a, -1, -1)
+		}
 	}
 
 	applyOffsets(a, i.offsetsByte)

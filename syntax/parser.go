@@ -170,10 +170,11 @@ func parseSub(s *source, state *state, verbose bool, nested int) (*subPattern, e
 		hasPrefix := true
 
 		for _, item := range items {
-			if item == nil {
+			if item.len() == 0 {
 				hasPrefix = false
 				break
 			}
+
 			if prefix == nil {
 				prefix = item.get(0)
 			} else if !item.get(0).equals(prefix) {
@@ -871,7 +872,7 @@ func parseEscape(s *source, state *state, inCls bool) (*token, error) {
 	case 'a':
 		return newLiteral('\a'), nil
 	case 'b':
-		if !inCls {
+		if inCls {
 			return newLiteral('\b'), nil
 		} else {
 			return newAtToken(AT, AT_BOUNDARY), nil

@@ -45,10 +45,6 @@ func (r *templateReplacer) replace(m *Match) (string, error) {
 		if t.IsLiteral() {
 			b.WriteString(t.Literal)
 		} else {
-			if t.Index >= len(m.groups) {
-				return "", fmt.Errorf("invalid group reference %d", t.Index)
-			}
-
 			g := m.groups[t.Index]
 			if !g.empty() {
 				b.WriteString(g.str)
