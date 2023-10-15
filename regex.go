@@ -21,6 +21,7 @@ type regexEngine interface {
 	SubexpNames() []string
 	NumSubexp() int
 	SubexpIndex(name string) int
+	SupportsLongest() bool          // support for the longest match function
 	BuildInput(s string) regexInput // Fix invalid codepoints
 }
 
@@ -32,28 +33,29 @@ type regexInput interface {
 func compileRegex(p *sre.Preprocessor, re2Fallback bool) (regexEngine, error) {
 	var err error
 
-	if !p.IsUnsupported() {
+	if p.IsSupported() {
 		var r *regexp.Regexp
 
 		s := p.String()
 
 		r, err = regexp.Compile(s)
-		if err == nil {
-			re := &stdRegex{
-				re:     r,
-				numCap: numCap(r),
-			}
-
-			return re, nil
+		if err != nil {
+			return nil, err
 		}
-	} else if !re2Fallback {
-		return nil, errors.New("regex has unsupported elements")
+
+		re := &stdRegex{
+			re:     r,
+			numCap: numCap(r),
+		}
+
+		return re, nil
 	}
 
 	if re2Fallback {
 		var r2 *regexp2.Regexp
 
-		s := p.FallbackString()
+		s, remapping := p.FallbackString()
+
 		flags := p.Flags()
 		options := regexp2.None | regexp2.RE2
 
@@ -71,17 +73,42 @@ func compileRegex(p *sre.Preprocessor, re2Fallback bool) (regexEngine, error) {
 		}
 
 		r2, err = regexp2.Compile(s, options)
-		if err == nil {
-			re := &advRegex{
-				re:     r2,
-				numCap: numCap2(r2),
-			}
-
-			return re, nil
+		if err != nil {
+			return nil, err
 		}
+
+		// Becase the regexp2 engine may reorder groups, so the order of groups for the same regex is not
+		// the same at Python and .NET, we have to save a remapping.
+		// This remapping is determined, by getting a mapping of all new group names and the ordered list
+		// of the group names of the compiled regex and then all group names are compared.
+		// If the position of a single group name does not match, the mapping is added to a map.
+
+		var groupMapping map[int]int
+		for newpos, group := range r2.GetGroupNames() {
+			if oldpos, ok := remapping[group]; ok && oldpos != newpos { // only store the remapping of group positions, that have been changed
+				if groupMapping == nil {
+					groupMapping = make(map[int]int)
+				}
+				groupMapping[newpos] = oldpos
+			} else {
+				continue
+			}
+		}
+
+		// TODO: I am not yet sure, how regexp2 reorders the groups.
+		// Maybe groupMapping is always empty, but that whould be no issue and except at regexp compiling,
+		// no overhead is produced.
+
+		re := &fallbEngine{
+			re:         r2,
+			numSubexp:  numCapFallb(r2) - 1,
+			groupNames: p.GroupNames(),
+		}
+
+		return re, nil
 	}
 
-	return nil, err // return the second error
+	return nil, errors.New("regex has unsupported elements")
 }
 
 // numCap returns the unexported field `r.prog.NumCap`.
@@ -92,8 +119,8 @@ func numCap(r *regexp.Regexp) int {
 	return (*syntax.Prog)(p).NumCap
 }
 
-// numCap returns the unexported field `r.capsize`.
-func numCap2(r *regexp2.Regexp) int {
+// numCapFallb returns the unexported field `r.capsize`.
+func numCapFallb(r *regexp2.Regexp) int {
 	v := reflect.ValueOf(r).Elem()
 	v = v.FieldByName("capsize")
 	return int(v.Int())
@@ -110,13 +137,16 @@ type stdInput struct {
 	offsets []int
 }
 
-type advRegex struct {
-	re     *regexp2.Regexp
-	numCap int
+type fallbEngine struct {
+	re        *regexp2.Regexp
+	numSubexp int
+
+	groupNames   map[string]int // fallback preprocessor renames the groups, so the original mapping must be saved
+	groupMapping map[int]int    // regexp2 (and .NET) orders groups other than Python, so they must be reordered
 }
 
 type advInput struct {
-	re          *advRegex
+	re          *fallbEngine
 	chars       []rune
 	offsetsRune []int // offsets for converting byte indices to rune indices
 	offsetsByte []int // offsets for converting rune indices to byte indices
@@ -125,7 +155,7 @@ type advInput struct {
 var (
 	_ regexEngine = (*stdRegex)(nil)
 	_ regexInput  = (*stdInput)(nil)
-	_ regexEngine = (*advRegex)(nil)
+	_ regexEngine = (*fallbEngine)(nil)
 	_ regexInput  = (*advInput)(nil)
 )
 
@@ -139,6 +169,10 @@ func (r *stdRegex) NumSubexp() int {
 
 func (r *stdRegex) SubexpIndex(name string) int {
 	return r.re.SubexpIndex(name)
+}
+
+func (r *stdRegex) SupportsLongest() bool {
+	return true
 }
 
 func (r *stdRegex) BuildInput(s string) regexInput {
@@ -241,7 +275,7 @@ func applyOffsets(a []int, offsets []int) {
 	}
 }
 
-func (r *advRegex) SubexpNames() []string {
+func (r *fallbEngine) SubexpNames() []string {
 	names := r.re.GetGroupNames()
 
 	// filter numerical group names
@@ -254,15 +288,23 @@ func (r *advRegex) SubexpNames() []string {
 	return names
 }
 
-func (r *advRegex) NumSubexp() int {
-	return r.numCap
+func (r *fallbEngine) NumSubexp() int {
+	return r.numSubexp
 }
 
-func (r *advRegex) SubexpIndex(name string) int {
-	return r.re.GroupNumberFromName(name)
+func (r *fallbEngine) SubexpIndex(name string) int {
+	if i, ok := r.groupNames[name]; ok {
+		return i
+	}
+
+	return -1
 }
 
-func (r *advRegex) BuildInput(s string) regexInput {
+func (r *fallbEngine) SupportsLongest() bool {
+	return false
+}
+
+func (r *fallbEngine) BuildInput(s string) regexInput {
 	chars, offsetsRune, offsetsByte := getRuneOffsets(s)
 
 	return &advInput{
@@ -327,14 +369,25 @@ func (i *advInput) Find(pos int, longest bool, dstCap []int) ([]int, error) {
 	}
 
 	groups := m.Groups()
-	a := make([]int, 0, 2*len(groups))
+	a := make([]int, 2*len(groups))
 
-	for _, g := range groups {
-		if len(g.Captures) != 0 {
-			a = append(a, g.Index, g.Index+g.Length)
-		} else {
-			a = append(a, -1, -1)
+	for index, g := range groups {
+		if i.re.groupMapping != nil { // maybe the index needs a remap
+			if indx, ok := i.re.groupMapping[index]; ok {
+				index = indx
+			}
 		}
+
+		start := -1
+		end := -1
+
+		if len(g.Captures) != 0 {
+			start = g.Index
+			end = g.Index + g.Length
+		}
+
+		a[2*index] = start
+		a[2*index+1] = end
 	}
 
 	applyOffsets(a, i.offsetsByte)

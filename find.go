@@ -1,18 +1,11 @@
 package re
 
-import (
-	"unicode/utf8"
-)
+import "unicode/utf8"
 
 // Replacement for `FindStringSubmatchIndex`, to specify a starting position.
-func findMatch(r regexEngine, s string, pos int) ([]int, error) {
+func findMatch(r regexEngine, s string, pos int, longest bool) ([]int, error) {
 	in := r.BuildInput(s)
-	return in.Find(pos, false, nil)
-}
-
-func findLongestMatch(r regexEngine, s string, pos int) ([]int, error) {
-	in := r.BuildInput(s)
-	return in.Find(pos, true /* find longest */, nil)
+	return in.Find(pos, longest, nil)
 }
 
 // TODO
@@ -59,8 +52,8 @@ func findMatches(r regexEngine, s string, pos int, n int, deliver func(a []int) 
 
 		if firstPass {
 			// If an empty match was found, try to search this position again,
-			// but now look for the longest match.
-			if a[0] == a[1] {
+			// but now look for the longest match, but only if supported.
+			if r.SupportsLongest() && a[0] == a[1] {
 				firstPass = false
 				continue
 			}

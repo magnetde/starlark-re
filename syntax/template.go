@@ -42,7 +42,7 @@ func ParseTemplate(s Indexer, template string, isString bool) ([]TemplateRule, e
 	}
 
 	addIndex := func(i int) error {
-		if i >= s.NumSubexp() {
+		if i > s.NumSubexp() {
 			return fmt.Errorf("invalid group reference %d", i)
 		}
 

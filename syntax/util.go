@@ -4,19 +4,9 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"unicode"
 
 	"github.com/magnetde/starlark-re/util"
 )
-
-func isDigitString(s string) bool {
-	for _, c := range s {
-		if !unicode.IsDigit(c) {
-			return false
-		}
-	}
-	return true
-}
 
 func isASCIILetter(b rune) bool {
 	return ('a' <= b && b <= 'z') || ('A' <= b && b <= 'Z')

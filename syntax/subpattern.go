@@ -70,6 +70,12 @@ func isUnsupported(t *token) bool {
 	switch t.opcode {
 	case ASSERT, ASSERT_NOT, GROUPREF, GROUPREF_EXISTS, ATOMIC_GROUP:
 		return true
+	case AT:
+		p := t.params.(paramAt)
+
+		if atCode(p) == AT_END_STRING {
+			return true
+		}
 	case BRANCH:
 		p := t.params.(*paramSubPatterns)
 
@@ -166,9 +172,7 @@ func dumpToken(v *token, b *strings.Builder, level int) {
 			}
 			a.dumpr(b, level+1)
 		}
-	case CATEGORY:
-		pv := v.params.(paramCategory)
-		printParams(pv)
+	case CATEGORY: // tokens of type "CATEGORY" always appear in "IN" tokens
 	case GROUPREF:
 		pv := v.params.(paramInt)
 		printParams(pv)
@@ -248,13 +252,15 @@ type subPatternWriter struct {
 
 func (w *subPatternWriter) writePattern(p *subPattern) {
 	for _, item := range p.data {
-		if !w.replace(w, item) {
-			w.writeToken(item, len(p.data) > 1)
-		}
+		w.writeToken(item, len(p.data) > 1)
 	}
 }
 
 func (w *subPatternWriter) writeToken(t *token, hasSiblings bool) {
+	if w.replace(w, t) {
+		return
+	}
+
 	switch t.opcode {
 	case ANY:
 		w.WriteByte('.')
@@ -313,7 +319,23 @@ func (w *subPatternWriter) writeToken(t *token, hasSiblings bool) {
 			w.WriteByte(')')
 		}
 	case CATEGORY:
-		w.writeCategory(t)
+		// Always inside of character sets.
+		p := t.params.(paramCategory)
+
+		switch chCode(p) {
+		case CATEGORY_DIGIT:
+			w.WriteString(`\d`)
+		case CATEGORY_NOT_DIGIT:
+			w.WriteString(`\D`)
+		case CATEGORY_SPACE:
+			w.WriteString(`\s`)
+		case CATEGORY_NOT_SPACE:
+			w.WriteString(`\S`)
+		case CATEGORY_WORD:
+			w.WriteString(`\w`)
+		case CATEGORY_NOT_WORD:
+			w.WriteString(`\W`)
+		}
 	case GROUPREF:
 		p := t.params.(paramInt)
 
@@ -332,21 +354,13 @@ func (w *subPatternWriter) writeToken(t *token, hasSiblings bool) {
 		}
 		w.WriteByte(')')
 	case IN:
-		// members in items are either of type LITERAL, RANGE or CATEGORY
+		// Members in items are either of type LITERAL, RANGE or CATEGORY.
+		// IN tokens are always written as sets, because it is unknown, how the replacer function
+		// rewrites elements inside of the set.
+
 		w.WriteByte('[')
 		for _, v := range t.items {
-			switch v.opcode {
-			case LITERAL:
-				w.writeLiteral(v.c)
-			case RANGE:
-				p := v.params.(*paramRange)
-
-				w.writeLiteral(p.lo)
-				w.WriteByte('-')
-				w.writeLiteral(p.hi)
-			case CATEGORY:
-				w.writeCategory(v)
-			}
+			w.writeToken(v, len(t.items) > 1)
 		}
 		w.WriteByte(']')
 	case LITERAL:
@@ -354,7 +368,15 @@ func (w *subPatternWriter) writeToken(t *token, hasSiblings bool) {
 	case MIN_REPEAT, MAX_REPEAT, POSSESSIVE_REPEAT:
 		p := t.params.(*paramRepeat)
 
-		needsGroup := p.item.len() > 1 || p.item.get(0).opcode == BRANCH
+		needsGroup := false
+		if p.item.len() > 1 {
+			needsGroup = true
+		} else {
+			switch p.item.get(0).opcode {
+			case BRANCH, MIN_REPEAT, MAX_REPEAT, POSSESSIVE_REPEAT:
+				needsGroup = true
+			}
+		}
 
 		if !needsGroup {
 			w.writePattern(p.item)
@@ -380,13 +402,19 @@ func (w *subPatternWriter) writeToken(t *token, hasSiblings bool) {
 			w.WriteByte('}')
 		}
 
+		switch t.opcode {
+		case MIN_REPEAT:
+			w.WriteByte('?')
+		case POSSESSIVE_REPEAT:
+			w.WriteByte('+')
+		}
 	case NOT_LITERAL:
 		w.WriteString("[^")
 		w.writeLiteral(t.c)
 		w.WriteByte(']')
 	case NEGATE:
 		w.WriteByte('^')
-	case RANGE: // Should only occur in "IN" tokens
+	case RANGE:
 		p := t.params.(*paramRange)
 
 		w.writeLiteral(p.lo)
@@ -472,26 +500,6 @@ func (w *subPatternWriter) writeLiteral(r rune) {
 		}
 		w.WriteString(s)
 		w.WriteByte('}')
-	}
-}
-
-// will panic, if token is not a category token
-func (w *subPatternWriter) writeCategory(t *token) {
-	p := t.params.(paramCategory)
-
-	switch chCode(p) {
-	case CATEGORY_DIGIT:
-		w.WriteString(`\d`)
-	case CATEGORY_NOT_DIGIT:
-		w.WriteString(`\D`)
-	case CATEGORY_SPACE:
-		w.WriteString(`\s`)
-	case CATEGORY_NOT_SPACE:
-		w.WriteString(`\S`)
-	case CATEGORY_WORD:
-		w.WriteString(`\w`)
-	case CATEGORY_NOT_WORD:
-		w.WriteString(`\W`)
 	}
 }
 

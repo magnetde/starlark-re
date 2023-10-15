@@ -27,12 +27,7 @@ func (s *source) restore(src string) {
 }
 
 func (s *source) tell() int {
-	before, found := strings.CutSuffix(s.orig, s.s)
-	if !found {
-		return 0
-	}
-
-	return len(before)
+	return len(s.orig) - len(s.s)
 }
 
 func (s *source) read() (rune, bool) {
@@ -65,7 +60,7 @@ func (s *source) peek() (rune, bool) {
 }
 
 func (s *source) skipUntil(sep string) {
-	_, s.s, _ = strings.Cut(s.s, "\n")
+	_, s.s, _ = strings.Cut(s.s, sep)
 }
 
 func (s *source) getUntil(c rune, name string) (string, error) {
@@ -91,18 +86,22 @@ func (s *source) match(c rune) bool {
 	return false
 }
 
-func (s *source) nextInt() int {
+func (s *source) nextInt() (int, bool) {
 	i := 0
+	found := false
+
 	for len(s.s) > 0 {
 		if !isDigitByte(s.s[0]) {
 			break
 		}
 
 		i = 10*i + digitByte(s.s[0])
+		found = true
+
 		s.s = s.s[1:]
 	}
 
-	return i
+	return i, found
 }
 
 func (s *source) nextHex(n int) string {

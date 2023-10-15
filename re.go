@@ -298,7 +298,7 @@ func regexpSearch(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Value, 
 		return nil, err
 	}
 
-	match, err := findMatch(p.re, str.value, pos)
+	match, err := findMatch(p.re, str.value, pos, false)
 	if err != nil {
 		return nil, err
 	}
@@ -364,7 +364,7 @@ func regexpMatch(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Value, e
 		return nil, err
 	}
 
-	match, err := findMatch(p.re, str.value, pos)
+	match, err := findMatch(p.re, str.value, pos, false)
 	if err != nil {
 		return nil, err
 	}
@@ -406,7 +406,7 @@ func regexpFullmatch(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Valu
 		return nil, err
 	}
 
-	match, err := findLongestMatch(p.re, str.value, pos)
+	match, err := findMatch(p.re, str.value, pos, true /* find longest */)
 	if err != nil {
 		return nil, err
 	}
@@ -675,7 +675,7 @@ func newPattern(pattern strOrBytes, flags int, re2Fallback bool) (*Pattern, erro
 	o := Pattern{
 		re:        re,
 		pattern:   pattern,
-		flags:     flags,
+		flags:     pp.Flags(),
 		groupDict: groups,
 	}
 

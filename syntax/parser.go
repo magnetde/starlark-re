@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
-
-	"github.com/magnetde/starlark-re/util"
 )
 
 const (
@@ -24,8 +22,8 @@ type state struct {
 	grouprefpos      map[int]int
 }
 
-func (s *state) init() {
-	s.flags = 0
+func (s *state) init(flags int) {
+	s.flags = flags
 	s.groupdict = make(map[string]int)
 	s.groupwidths = []bool{false}
 	s.lookbehindgroups = -1
@@ -79,7 +77,7 @@ func (s *state) checklookbehindgroup(gid int) error {
 // equal to the Python re module.
 func parse(str string, isStr bool, flags int) (*subPattern, error) {
 	var state state
-	state.init()
+	state.init(flags)
 
 	var s source
 	s.init(str, isStr)
@@ -196,13 +194,13 @@ func parseSub(s *source, state *state, verbose bool, nested int) (*subPattern, e
 		break
 	}
 
-	appendSub := true
+	appendSet := true
 
 	// check if the branch can be replaced by a character set
 	var set []*token
 	for _, item := range items {
 		if item.len() != 1 {
-			appendSub = false
+			appendSet = false
 			break
 		}
 		t := item.get(0)
@@ -212,12 +210,12 @@ func parseSub(s *source, state *state, verbose bool, nested int) (*subPattern, e
 		} else if op == IN && t.items[0].opcode != NEGATE {
 			set = append(set, t.items...)
 		} else {
-			appendSub = false
+			appendSet = false
 			break
 		}
 	}
 
-	if appendSub {
+	if appendSet {
 		// we can store this as a character set instead of a
 		// branch (the compiler may optimize this even more)
 		sp.append(newItemsToken(IN, unique(set)))
@@ -305,6 +303,8 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 
 			// check remaining characters
 			for {
+				tmpPos := s.tell() // determine the current position; necessary for the err message
+
 				c, ok = s.read()
 				if !ok {
 					return nil, errors.New("unterminated character set")
@@ -348,14 +348,11 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 						code2 = newLiteral(ch)
 					}
 
-					if code1.opcode != LITERAL || code2.opcode != LITERAL {
-						return nil, fmt.Errorf("bad character range %c-%c", c, ch)
-					}
-
 					lo := code1.c
 					hi := code2.c
-					if hi < lo {
-						return nil, fmt.Errorf("bad character range %c-%c", c, ch)
+
+					if code1.opcode != LITERAL || code2.opcode != LITERAL || hi < lo {
+						return nil, fmt.Errorf("bad character range %s", s.orig[tmpPos:s.tell()])
 					}
 
 					set = append(set, newRange(RANGE, lo, hi))
@@ -403,12 +400,16 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 					continue
 				}
 
-				min = s.nextInt()
+				var lo, hi int // temporary values
+				var hasLo, hasHi bool
+
+				lo, hasLo = s.nextInt()
 
 				if s.match(',') {
-					max = s.nextInt()
+					hi, hasHi = s.nextInt()
 				} else {
-					max = min
+					hi = lo
+					hasHi = hasLo
 				}
 
 				if !s.match('}') {
@@ -417,14 +418,27 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 					continue
 				}
 
-				if min > MAXREPEAT {
-					return nil, errors.New("the repetition number is too large")
+				if hasLo {
+					min = lo
+
+					if min >= MAXREPEAT {
+						return nil, errors.New("the repetition number is too large")
+					}
+				} else {
+					min = 0
 				}
-				if max > MAXREPEAT {
-					return nil, errors.New("the repetition number is too large")
-				}
-				if max < min {
-					return nil, errors.New("min repeat greater than max repeat")
+
+				if hasHi {
+					max = hi
+
+					if max >= MAXREPEAT {
+						return nil, errors.New("the repetition number is too large")
+					}
+					if max < min {
+						return nil, errors.New("min repeat greater than max repeat")
+					}
+				} else {
+					max = MAXREPEAT
 				}
 			default:
 				return nil, fmt.Errorf("unsupported quantifier '%c'", c)
@@ -601,7 +615,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 						return nil, err
 					}
 
-					if !(isDigitString(condname) && util.IsASCIIString(condname)) {
+					if ugroup, e := strconv.ParseUint(condname, 10, 32); e != nil {
 						err = checkgroupname(condname, s.isStr)
 						if err != nil {
 							return nil, err
@@ -612,20 +626,17 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 							return nil, fmt.Errorf("unknown group name '%s'", condname)
 						}
 					} else {
-						condgroup, err = strconv.Atoi(condname)
-						if err != nil || condgroup == 0 {
+						if ugroup == 0 {
 							return nil, errors.New("bad group number")
 						}
-
-						if condgroup >= MAXGROUPS {
+						if ugroup >= MAXGROUPS {
 							return nil, fmt.Errorf("invalid group reference %d", condgroup)
 						}
 
+						condgroup = int(ugroup)
+
 						if _, ok = state.grouprefpos[condgroup]; !ok {
 							state.grouprefpos[condgroup] = s.tell() - len(condname) - 1
-						}
-						if !(isDigitString(condname) && util.IsASCIIString(condname)) {
-							return nil, fmt.Errorf("bad character in group name %s", util.QuoteString(condname, s.isStr, false))
 						}
 					}
 
@@ -744,7 +755,7 @@ func parseEscape(s *source, state *state, inCls bool) (*token, error) {
 
 	c, ok := s.read()
 	if !ok {
-		return nil, errors.New("bad escape")
+		return nil, errors.New("bad escape (end of pattern)")
 	}
 
 	switch c {
