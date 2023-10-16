@@ -71,11 +71,16 @@ func isGoIdentifer(name string) bool {
 }
 
 func (p *Preprocessor) String() string {
-	flags := p.Flags()
-
 	var b strings.Builder
 
-	if flags&(FlagIgnoreCase|FlagMultiline|FlagDotAll) != 0 {
+	flags := p.Flags()
+	if flags&FlagIgnoreCase != 0 && flags&FlagASCII != 0 {
+		// Remove the ASCII flag if it is enabled together with the IGNORECASE flag,
+		// because the ignore case handling is done by the preprocessor.
+		flags &= ^FlagIgnoreCase
+	}
+
+	if flags&supportedFlags != 0 {
 		b.WriteString("(?")
 
 		if flags&FlagIgnoreCase != 0 {
@@ -91,24 +96,53 @@ func (p *Preprocessor) String() string {
 		b.WriteByte(')')
 	}
 
-	b.WriteString(p.p.string(p.isStr, p.replacer))
+	b.WriteString(p.p.string(p.isStr, p.defaultReplacer))
 
 	return b.String()
 }
 
-func (p *Preprocessor) replacer(w *subPatternWriter, t *token) bool {
-	ascii := p.Flags()&FlagASCII != 0
-
-	if !p.isStr || ascii {
+// If UNICODE is enabled, the sets \d, \D, \s, ... are replaced with an unicode counterpart.
+// If IGNORECASE and ASCII is enabled, every literal and range of ASCII characters is replaced with a character set,
+// that contains all characters, that match all cases of this character.
+func (p *Preprocessor) defaultReplacer(w *subPatternWriter, t *token, ctx *subPatternContext) bool {
+	if !p.isStr {
 		return false
 	}
 
-	// If the current pattern is a string and the ASCII mode is not enabled,
-	// some patterns had to be replaced with some equivalent unicode counterpart,
-	// because by default, `regexp` only matches ASCII patterns.
+	flags := p.Flags()
+	if ctx.group != nil {
+		addFlags := ctx.group.addFlags
+		delFlags := ctx.group.delFlags
+
+		if addFlags&FlagUnicode != 0 || delFlags&FlagASCII != 0 {
+			flags |= FlagUnicode
+			flags &= ^FlagASCII
+		}
+		if addFlags&FlagASCII != 0 || delFlags&FlagUnicode != 0 {
+			flags |= FlagASCII
+			flags &= ^FlagUnicode
+		}
+	}
+
+	unicode := false
+	asciiCase := false
+
+	if flags&FlagUnicode != 0 {
+		unicode = true
+	} else if flags&FlagIgnoreCase != 0 && flags&FlagASCII != 0 {
+		asciiCase = true
+	}
 
 	switch t.opcode {
 	case CATEGORY:
+		// If the current pattern is a string and the ASCII mode is not enabled,
+		// some patterns had to be replaced with some equivalent unicode counterpart,
+		// because by default, `regexp` only matches ASCII patterns.
+
+		if !unicode {
+			return false
+		}
+
 		// Always inside of character sets.
 		pm := t.params.(paramCategory)
 
@@ -137,9 +171,66 @@ func (p *Preprocessor) replacer(w *subPatternWriter, t *token) bool {
 			err := p.writeRange(w, `[^\p{L}\p{N}_]`)
 			return err == nil
 		}
+	case LITERAL:
+		if !asciiCase {
+			return false
+		}
+
+		o, ok := otherCase(t.c)
+		if !ok {
+			return false
+		}
+
+		if !ctx.inSet {
+			w.WriteByte('[')
+			w.writeLiteral(t.c)
+			w.WriteRune(o)
+			w.WriteByte(']')
+		} else {
+			w.writeLiteral(t.c)
+			w.writeLiteral(o)
+		}
+	case RANGE:
+		if !asciiCase {
+			return false
+		}
+
+		p := t.params.(*paramRange)
+
+		lo, oklo := otherCase(p.lo)
+		if !oklo {
+			return false
+		}
+
+		hi, okhi := otherCase(p.lo)
+		if !okhi {
+			return false
+		}
+
+		w.writeLiteral(p.lo)
+		w.WriteByte('-')
+		w.writeLiteral(p.hi)
+		w.writeLiteral(lo)
+		w.WriteByte('-')
+		w.writeLiteral(hi)
 	}
 
 	return false
+}
+
+// returns the character with the opposite case of `c`.
+// Must only be called for ASCII chars.
+func otherCase(c rune) (rune, bool) {
+	if c > unicode.MaxASCII {
+		return 0, false
+	}
+	if 'a' <= c && c <= 'z' {
+		return c - 'a' + 'A', true
+	}
+	if 'A' <= c && c <= 'Z' {
+		return c - 'A' + 'a', true
+	}
+	return c, false
 }
 
 func (p *Preprocessor) writeRange(w *subPatternWriter, s string) error {
@@ -169,7 +260,11 @@ func (p *Preprocessor) FallbackString() (string, map[string]int) {
 	groupMapping := make(map[string]int)
 
 	var b strings.Builder
-	b.WriteString(p.p.string(p.isStr, func(w *subPatternWriter, t *token) bool {
+	b.WriteString(p.p.string(p.isStr, func(w *subPatternWriter, t *token, ctx *subPatternContext) bool {
+		if p.defaultReplacer(w, t, ctx) {
+			return true
+		}
+
 		if t.opcode == SUBPATTERN {
 			p := t.params.(*paramSubPattern)
 
@@ -187,7 +282,7 @@ func (p *Preprocessor) FallbackString() (string, map[string]int) {
 			w.WriteString(g)
 			w.WriteByte('>')
 			if p.p.len() > 0 {
-				w.writePattern(p.p)
+				w.writePattern(p.p, p)
 			}
 			w.WriteByte(')')
 

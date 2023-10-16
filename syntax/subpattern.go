@@ -68,7 +68,11 @@ func (p *subPattern) isUnsupported() bool {
 
 func isUnsupported(t *token) bool {
 	switch t.opcode {
-	case ASSERT, ASSERT_NOT, GROUPREF, GROUPREF_EXISTS, ATOMIC_GROUP:
+	case ASSERT, ASSERT_NOT,
+		GROUPREF, GROUPREF_EXISTS,
+		ATOMIC_GROUP,
+		POSSESSIVE_REPEAT,
+		FAILURE:
 		return true
 	case AT:
 		p := t.params.(paramAt)
@@ -84,7 +88,7 @@ func isUnsupported(t *token) bool {
 				return true
 			}
 		}
-	case MIN_REPEAT, MAX_REPEAT, POSSESSIVE_REPEAT:
+	case MIN_REPEAT, MAX_REPEAT:
 		p := t.params.(*paramRepeat)
 
 		return p.item.isUnsupported()
@@ -99,7 +103,7 @@ func isUnsupported(t *token) bool {
 
 func (p *subPattern) dump(print func(s string)) {
 	var b strings.Builder
-	p.dumpr(&b, 0)
+	p.dumpPattern(&b, 0)
 
 	if print == nil {
 		fmt.Print(b.String())
@@ -108,7 +112,7 @@ func (p *subPattern) dump(print func(s string)) {
 	}
 }
 
-func (p *subPattern) dumpr(b *strings.Builder, level int) {
+func (p *subPattern) dumpPattern(b *strings.Builder, level int) {
 	for _, v := range p.data {
 		op := v.opcode
 
@@ -141,7 +145,7 @@ func dumpToken(v *token, b *strings.Builder, level int) {
 					print()
 				}
 
-				sp.dumpr(b, level+1)
+				sp.dumpPattern(b, level+1)
 				nl = true
 			} else {
 				if !nl {
@@ -170,7 +174,7 @@ func dumpToken(v *token, b *strings.Builder, level int) {
 			if i != 0 {
 				print(strings.Repeat("  ", level) + "OR")
 			}
-			a.dumpr(b, level+1)
+			a.dumpPattern(b, level+1)
 		}
 	case CATEGORY: // tokens of type "CATEGORY" always appear in "IN" tokens
 	case GROUPREF:
@@ -180,10 +184,10 @@ func dumpToken(v *token, b *strings.Builder, level int) {
 		pv := v.params.(*paramGrouprefEx)
 		print("", pv.condgroup)
 
-		pv.itemYes.dumpr(b, level+1)
+		pv.itemYes.dumpPattern(b, level+1)
 		if pv.itemNo != nil {
 			print(strings.Repeat("  ", level) + "ELSE")
-			pv.itemNo.dumpr(b, level+1)
+			pv.itemNo.dumpPattern(b, level+1)
 		}
 	case IN:
 		// member sublanguage
@@ -229,35 +233,52 @@ func dumpToken(v *token, b *strings.Builder, level int) {
 	case ATOMIC_GROUP:
 		pv := v.params.(*paramSubPatterns)
 		print()
-		pv.items[0].dumpr(b, level+1)
+		pv.items[0].dumpPattern(b, level+1)
+	case FAILURE:
+		print()
 	}
 }
 
-// TODO: change the replacer parameters, so the *subPatternWriter can be used.
-func (p *subPattern) string(isStr bool, replace func(w *subPatternWriter, t *token) bool) string {
+func (p *subPattern) string(isStr bool, replace func(w *subPatternWriter, t *token, ctx *subPatternContext) bool) string {
 	w := subPatternWriter{
 		isStr:   isStr,
 		replace: replace,
 	}
 
-	w.writePattern(p)
+	w.writePattern(p, nil)
 	return w.String()
 }
 
 type subPatternWriter struct {
 	strings.Builder
 	isStr   bool
-	replace func(w *subPatternWriter, t *token) bool
+	replace func(w *subPatternWriter, t *token, ctx *subPatternContext) bool
 }
 
-func (w *subPatternWriter) writePattern(p *subPattern) {
+type subPatternContext struct {
+	hasSiblings bool
+	inSet       bool
+	group       *paramSubPattern
+}
+
+func (w *subPatternWriter) writePattern(p *subPattern, parent *paramSubPattern) {
+	ctx := subPatternContext{
+		hasSiblings: len(p.data) > 1,
+		inSet:       false,
+		group:       parent,
+	}
+
 	for _, item := range p.data {
-		w.writeToken(item, len(p.data) > 1)
+		w.writeToken(item, &ctx)
 	}
 }
 
-func (w *subPatternWriter) writeToken(t *token, hasSiblings bool) {
-	if w.replace(w, t) {
+// Flags supported by the Go regex library.
+const supportedFlags = FlagIgnoreCase | FlagMultiline | FlagDotAll
+
+// `inSet` can only be true, of called from `IN` token.
+func (w *subPatternWriter) writeToken(t *token, ctx *subPatternContext) {
+	if w.replace(w, t, ctx) {
 		return
 	}
 
@@ -282,7 +303,7 @@ func (w *subPatternWriter) writeToken(t *token, hasSiblings bool) {
 			w.WriteByte('!')
 		}
 
-		w.writePattern(p.p)
+		w.writePattern(p.p, ctx.group)
 		w.WriteByte(')')
 	case AT:
 		p := t.params.(paramAt)
@@ -306,16 +327,16 @@ func (w *subPatternWriter) writeToken(t *token, hasSiblings bool) {
 
 		// Always wrap branches branches inside of an non-capture group, if the current
 		// subpattern contains other token, than this branch token.
-		if hasSiblings {
+		if ctx.hasSiblings {
 			w.WriteString("(?:")
 		}
 		for i, item := range p.items {
 			if i > 0 {
 				w.WriteByte('|')
 			}
-			w.writePattern(item)
+			w.writePattern(item, ctx.group)
 		}
-		if hasSiblings {
+		if ctx.hasSiblings {
 			w.WriteByte(')')
 		}
 	case CATEGORY:
@@ -347,10 +368,10 @@ func (w *subPatternWriter) writeToken(t *token, hasSiblings bool) {
 		w.WriteString("(?(")
 		w.writeInt(p.condgroup)
 		w.WriteByte(')')
-		w.writePattern(p.itemYes)
+		w.writePattern(p.itemYes, ctx.group)
 		if p.itemNo != nil {
 			w.WriteByte('|')
-			w.writePattern(p.itemNo)
+			w.writePattern(p.itemNo, ctx.group)
 		}
 		w.WriteByte(')')
 	case IN:
@@ -358,9 +379,15 @@ func (w *subPatternWriter) writeToken(t *token, hasSiblings bool) {
 		// IN tokens are always written as sets, because it is unknown, how the replacer function
 		// rewrites elements inside of the set.
 
+		newCtx := subPatternContext{
+			hasSiblings: len(t.items) > 1,
+			inSet:       true,
+			group:       ctx.group,
+		}
+
 		w.WriteByte('[')
 		for _, v := range t.items {
-			w.writeToken(v, len(t.items) > 1)
+			w.writeToken(v, &newCtx)
 		}
 		w.WriteByte(']')
 	case LITERAL:
@@ -379,10 +406,10 @@ func (w *subPatternWriter) writeToken(t *token, hasSiblings bool) {
 		}
 
 		if !needsGroup {
-			w.writePattern(p.item)
+			w.writePattern(p.item, ctx.group)
 		} else {
 			w.WriteString("(?:")
-			w.writePattern(p.item)
+			w.writePattern(p.item, ctx.group)
 			w.WriteByte(')')
 		}
 
@@ -432,25 +459,30 @@ func (w *subPatternWriter) writeToken(t *token, hasSiblings bool) {
 				w.WriteString(groupName)
 				w.WriteByte('>')
 			}
-		} else if p.addFlags != 0 || p.delFlags != 0 {
-			// Flags can only appear, when no group name exists
+		} else {
+			addFlags := p.addFlags & supportedFlags
+			delFlags := p.delFlags & supportedFlags
 
-			w.WriteByte('?')
-			if p.addFlags != 0 {
-				w.writeFlags(p.addFlags)
-			}
-			if p.delFlags != 0 {
-				w.WriteByte('-')
-				w.writeFlags(p.addFlags)
-			}
+			if addFlags != 0 || delFlags != 0 {
+				// Flags can only appear, when no group name exists
 
-			if p.p.len() > 0 {
-				w.WriteByte(':')
+				w.WriteByte('?')
+				if addFlags != 0 {
+					w.writeFlags(addFlags)
+				}
+				if delFlags != 0 {
+					w.WriteByte('-')
+					w.writeFlags(delFlags)
+				}
+
+				if p.p.len() > 0 {
+					w.WriteByte(':')
+				}
 			}
 		}
 
 		if p.p.len() > 0 {
-			w.writePattern(p.p)
+			w.writePattern(p.p, p)
 		}
 
 		w.WriteByte(')')
@@ -458,8 +490,10 @@ func (w *subPatternWriter) writeToken(t *token, hasSiblings bool) {
 		p := t.params.(*paramSubPatterns)
 
 		w.WriteString("(?>")
-		w.writePattern(p.items[0])
+		w.writePattern(p.items[0], ctx.group)
 		w.WriteByte(')')
+	case FAILURE:
+		w.WriteString("(?!)")
 	}
 }
 

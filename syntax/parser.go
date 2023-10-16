@@ -403,10 +403,16 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 				var lo, hi int // temporary values
 				var hasLo, hasHi bool
 
-				lo, hasLo = s.nextInt()
+				lo, hasLo, err = s.nextInt()
+				if err != nil {
+					return nil, err
+				}
 
 				if s.match(',') {
-					hi, hasHi = s.nextInt()
+					hi, hasHi, err = s.nextInt()
+					if err != nil {
+						return nil, err
+					}
 				} else {
 					hi = lo
 					hasHi = hasLo

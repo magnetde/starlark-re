@@ -6,7 +6,6 @@ import (
 	"reflect"
 	"regexp"
 	"regexp/syntax"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 	"unsafe"
@@ -276,13 +275,10 @@ func applyOffsets(a []int, offsets []int) {
 }
 
 func (r *fallbEngine) SubexpNames() []string {
-	names := r.re.GetGroupNames()
+	names := make([]string, 1+r.numSubexp)
 
-	// filter numerical group names
-	for i, n := range names {
-		if _, err := strconv.Atoi(n); err == nil {
-			names[i] = ""
-		}
+	for group, i := range r.groupNames {
+		names[i] = group
 	}
 
 	return names

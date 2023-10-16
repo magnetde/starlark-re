@@ -26,9 +26,7 @@ const (
 type opcode uint32
 
 const (
-	// Skip zero opcode
 	FAILURE opcode = iota
-
 	ANY
 	ASSERT
 	ASSERT_NOT

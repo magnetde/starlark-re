@@ -2,14 +2,6 @@ package re
 
 import "unicode/utf8"
 
-func isOctDigit(b byte) bool {
-	return '0' <= b && b <= '7'
-}
-
-func isASCIILetter(b byte) bool {
-	return ('a' <= b && b <= 'z') || ('A' <= b && b <= 'Z')
-}
-
 var specialBytes = [16]byte{
 	0x04, 0x00, 0x00, 0x04, 0x04, 0x00, 0x04, 0x00,
 	0x04, 0x05, 0x05, 0xa5, 0xa1, 0xa5, 0xa4, 0x08,
