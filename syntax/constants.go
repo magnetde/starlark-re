@@ -2,9 +2,13 @@ package syntax
 
 import "math"
 
+// To install stringer: go install golang.org/x/tools/cmd/stringer@latest
+//
+//go:generate stringer -type=opcode,atCode,chCode -output=constants_string.go
+
 // Possible flags for the flag parameter.
 const (
-	_ = 1 << iota // `re.TEMPLATE`; unused
+	_ = 1 << iota // TEMPLATE; unused
 	FlagIgnoreCase
 	FlagLocale
 	FlagMultiline
@@ -13,15 +17,13 @@ const (
 	FlagVerbose
 	FlagDebug
 	FlagASCII
+	FlagFallback
 )
 
 const (
 	MAXREPEAT = math.MaxInt
 	MAXGROUPS = math.MaxInt / 2
 )
-
-// To install stringer: go install golang.org/x/tools/cmd/stringer@latest
-//go:generate stringer -type=opcode,atCode,chCode -output=constants_string.go
 
 type opcode uint32
 

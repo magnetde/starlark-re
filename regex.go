@@ -1,7 +1,6 @@
 package re
 
 import (
-	"errors"
 	"io"
 	"reflect"
 	"regexp"
@@ -29,10 +28,22 @@ type regexInput interface {
 }
 
 // input must be preprocessed
-func compileRegex(p *sre.Preprocessor, re2Fallback bool) (regexEngine, error) {
+func compileRegex(p *sre.Preprocessor, fallbackEnabled bool) (regexEngine, error) {
 	var err error
 
-	if p.IsSupported() {
+	flags := p.Flags()
+
+	useFallback := false
+	if fallbackEnabled {
+		if flags&sre.FlagFallback != 0 {
+			useFallback = true
+			flags &= ^sre.FlagFallback
+		} else if !p.IsSupported() {
+			useFallback = true
+		}
+	}
+
+	if !useFallback {
 		var r *regexp.Regexp
 
 		s := p.String()
@@ -48,14 +59,11 @@ func compileRegex(p *sre.Preprocessor, re2Fallback bool) (regexEngine, error) {
 		}
 
 		return re, nil
-	}
-
-	if re2Fallback {
+	} else {
 		var r2 *regexp2.Regexp
 
 		s, remapping := p.FallbackString()
 
-		flags := p.Flags()
 		options := regexp2.None | regexp2.RE2
 
 		if flags&sre.FlagIgnoreCase != 0 {
@@ -106,8 +114,6 @@ func compileRegex(p *sre.Preprocessor, re2Fallback bool) (regexEngine, error) {
 
 		return re, nil
 	}
-
-	return nil, errors.New("regex has unsupported elements")
 }
 
 // numCap returns the unexported field `r.prog.NumCap`.

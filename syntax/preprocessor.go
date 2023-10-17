@@ -101,6 +101,32 @@ func (p *Preprocessor) String() string {
 	return b.String()
 }
 
+var unicodeRanges = map[chCode][]rune{
+	CATEGORY_DIGIT:     buildRange(`[\p{Nd}]`),
+	CATEGORY_NOT_DIGIT: buildRange(`[^\p{Nd}]`),
+	CATEGORY_SPACE:     buildRange(`[\p{Z}\v]`),
+	CATEGORY_NOT_SPACE: buildRange(`[^\p{Z}\v]`),
+	CATEGORY_WORD:      buildRange(`[\p{L}\p{N}_]`),
+	CATEGORY_NOT_WORD:  buildRange(`[^\p{L}\p{N}_]`),
+}
+
+// While it is simple to include the negated character class of `\d` in a character set (by using \P{Nd}),
+// it is not trivial to include the negated character range of `\p{Z}\v`, since it is not possible to exclude
+// one of the sets `\p{Z}` AND `\v` at the same time. So, ranges must be included which contain ALL characters
+// which do not exist in `\p{Z}\v`.
+func buildRange(s string) []rune {
+	re, err := syntax.Parse(s, syntax.Perl)
+	if err != nil {
+		panic(err)
+	}
+
+	if re.Op != syntax.OpCharClass {
+		panic(fmt.Errorf("expected regex syntax type %s, got %s", syntax.OpCharClass, re.Op))
+	}
+
+	return re.Rune
+}
+
 // If UNICODE is enabled, the sets \d, \D, \s, ... are replaced with an unicode counterpart.
 // If IGNORECASE and ASCII is enabled, every literal and range of ASCII characters is replaced with a character set,
 // that contains all characters, that match all cases of this character.
@@ -146,30 +172,19 @@ func (p *Preprocessor) defaultReplacer(w *subPatternWriter, t *token, ctx *subPa
 		// Always inside of character sets.
 		pm := t.params.(paramCategory)
 
-		switch chCode(pm) {
-		case CATEGORY_DIGIT:
-			w.WriteString(`\p{Nd}`)
-			return true
-		case CATEGORY_NOT_DIGIT:
-			w.WriteString(`\P{Nd}`)
-			return true
-		case CATEGORY_SPACE:
-			w.WriteString(`\p{Z}\v`)
-			return true
-		case CATEGORY_NOT_SPACE:
-			// While it is simple to include the negated character class of `\d` in a character set (by using \P{Nd}),
-			// it is not trivial to include the negated character range of `\p{Z}\v`, since it is not possible to exclude
-			// one of the sets `\p{Z}` AND `\v` at the same time. So, ranges must be included which contain ALL characters
-			// which do not exist in `\p{Z}\v`.
-			err := p.writeRange(w, `[^\p{Z}\v]`)
-			return err == nil
-		case CATEGORY_WORD:
-			w.WriteString(`\p{L}\p{N}_`)
-			return true
-		case CATEGORY_NOT_WORD:
-			// See the comment at case 'S'.
-			err := p.writeRange(w, `[^\p{L}\p{N}_]`)
-			return err == nil
+		unirange, ok := unicodeRanges[chCode(pm)]
+		if !ok {
+			return false
+		}
+
+		for i := 0; i < len(unirange); i += 2 {
+			lo, hi := unirange[i], unirange[i+1]
+
+			w.writeLiteral(lo)
+			if lo != hi {
+				w.WriteByte('-')
+				w.writeLiteral(hi)
+			}
 		}
 	case LITERAL:
 		if !asciiCase {
@@ -231,29 +246,6 @@ func otherCase(c rune) (rune, bool) {
 		return c - 'A' + 'a', true
 	}
 	return c, false
-}
-
-func (p *Preprocessor) writeRange(w *subPatternWriter, s string) error {
-	re, err := syntax.Parse(s, syntax.Perl)
-	if err != nil {
-		return err
-	}
-
-	if re.Op != syntax.OpCharClass {
-		return fmt.Errorf("expected regex syntax type %s, got %s", syntax.OpCharClass, re.Op)
-	}
-
-	for i := 0; i < len(re.Rune); i += 2 {
-		lo, hi := re.Rune[i], re.Rune[i+1]
-
-		w.writeLiteral(lo)
-		if lo != hi {
-			w.WriteByte('-')
-			w.writeLiteral(hi)
-		}
-	}
-
-	return nil
 }
 
 func (p *Preprocessor) FallbackString() (string, map[string]int) {

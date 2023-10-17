@@ -38,9 +38,9 @@ var zeroInt = starlark.MakeInt(0)
 type Module struct {
 	members starlark.StringDict
 
-	list        *list.List                 // Least recent used regexps
-	cache       map[cacheKey]*list.Element // Mapping of patterns to list elements
-	re2Fallback bool                       // create regexp2 fallbacks
+	list           *list.List                 // Least recent used regexps
+	cache          map[cacheKey]*list.Element // Mapping of patterns to list elements
+	enableFallback bool                       // enable the regexp2 fallback engine
 }
 
 // cacheKey is a type, that is used for cache key, containing the pattern and the flags.
@@ -57,7 +57,7 @@ type cacheValue struct {
 }
 
 // NewModule creates a new re module with the given member dict.
-func NewModule(re2Fallback bool) *Module {
+func NewModule(enableFallback bool) *Module {
 	members := starlark.StringDict{
 		"A":          starlark.MakeInt(sre.FlagASCII),
 		"ASCII":      starlark.MakeInt(sre.FlagASCII),
@@ -90,11 +90,15 @@ func NewModule(re2Fallback bool) *Module {
 		"escape":    starlark.NewBuiltin("subn", reEscape),
 	}
 
+	if enableFallback {
+		members["FALLBACK"] = starlark.MakeInt(sre.FlagFallback)
+	}
+
 	r := Module{
-		members:     members,
-		list:        list.New(),
-		cache:       make(map[cacheKey]*list.Element),
-		re2Fallback: re2Fallback,
+		members:        members,
+		list:           list.New(),
+		cache:          make(map[cacheKey]*list.Element),
+		enableFallback: enableFallback,
 	}
 
 	return &r
@@ -152,7 +156,7 @@ func (m *Module) compile(pattern strOrBytes, flags int) (*Pattern, error) {
 		m.list.Remove(last)
 	}
 
-	p, err := newPattern(pattern, flags, m.re2Fallback)
+	p, err := newPattern(pattern, flags, m.enableFallback)
 	if err != nil {
 		return nil, err
 	}
@@ -642,7 +646,7 @@ type Pattern struct {
 }
 
 // newPattern creates a new pattern object, which is also a Starlark value.
-func newPattern(pattern strOrBytes, flags int, re2Fallback bool) (*Pattern, error) {
+func newPattern(pattern strOrBytes, flags int, fallbackEnabled bool) (*Pattern, error) {
 	p := pattern.value
 	isStr := pattern.isString
 
@@ -652,7 +656,7 @@ func newPattern(pattern strOrBytes, flags int, re2Fallback bool) (*Pattern, erro
 		return nil, err
 	}
 
-	re, err := compileRegex(pp, re2Fallback)
+	re, err := compileRegex(pp, fallbackEnabled)
 	if err != nil {
 		if e, ok := strings.CutPrefix(err.Error(), "error parsing regexp: "); ok {
 			err = errors.New(e)
@@ -720,6 +724,7 @@ var flagnames = []string{
 	"VERBOSE",
 	"DEBUG",
 	"ASCII",
+	"FALLBACK",
 }
 
 func (p *Pattern) writeflags(b *strings.Builder) {

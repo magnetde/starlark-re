@@ -164,6 +164,8 @@ func dumpToken(v *token, b *strings.Builder, level int) {
 	case ASSERT, ASSERT_NOT:
 		pv := v.params.(*paramAssert)
 		printParams(pv.dir, pv.p)
+	case ANY:
+		printParams("None")
 	case AT:
 		pv := v.params.(paramAt)
 		printParams(atCode(pv).String())
