@@ -42,8 +42,8 @@ func (t *token) equals(o *token) bool {
 
 type (
 	paramInt      int
-	paramAt       atCode
-	paramCategory chCode
+	paramAt       atcode
+	paramCategory catcode
 
 	paramAssert struct {
 		dir int
@@ -172,7 +172,7 @@ func newEmptyToken(opcode opcode) *token {
 
 // additional function, because it is called very often
 func newLiteral(c rune) *token {
-	return newCharToken(LITERAL, c)
+	return newCharToken(opLiteral, c)
 }
 
 func newCharToken(op opcode, c rune) *token {
@@ -192,7 +192,7 @@ func newAssertToken(op opcode, dir int, p *subPattern) *token {
 	}
 }
 
-func newAtToken(op opcode, at atCode) *token {
+func newAtToken(op opcode, at atcode) *token {
 	return &token{
 		opcode: op,
 		params: paramAt(at),
@@ -208,7 +208,7 @@ func newSubPatternsToken(op opcode, items []*subPattern) *token {
 	}
 }
 
-func newCategoryToken(op opcode, code chCode) *token {
+func newCategoryToken(op opcode, code catcode) *token {
 	return &token{
 		opcode: op,
 		params: paramCategory(code),

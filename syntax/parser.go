@@ -37,7 +37,7 @@ func (s *state) groups() int {
 func (s *state) opengroup(name string) (int, error) {
 	gid := s.groups()
 	s.groupwidths = append(s.groupwidths, false)
-	if s.groups() > MAXGROUPS {
+	if s.groups() > maxGroups {
 		return 0, errors.New("too many groups")
 	}
 	if name != "" {
@@ -205,9 +205,9 @@ func parseSub(s *source, state *state, verbose bool, nested int) (*subPattern, e
 		}
 		t := item.get(0)
 		op := t.opcode
-		if op == LITERAL {
+		if op == opLiteral {
 			set = append(set, t)
-		} else if op == IN && t.items[0].opcode != NEGATE {
+		} else if op == opIn && t.items[0].opcode != opNegate {
 			set = append(set, t.items...)
 		} else {
 			appendSet = false
@@ -218,9 +218,9 @@ func parseSub(s *source, state *state, verbose bool, nested int) (*subPattern, e
 	if appendSet {
 		// we can store this as a character set instead of a
 		// branch (the compiler may optimize this even more)
-		sp.append(newItemsToken(IN, unique(set)))
+		sp.append(newItemsToken(opIn, unique(set)))
 	} else {
-		sp.append(newSubPatternsToken(BRANCH, items))
+		sp.append(newSubPatternsToken(opBranch, items))
 	}
 
 	return sp, nil
@@ -247,12 +247,12 @@ func unique(items []*token) []*token {
 		}
 	}
 
-	var new []*token
+	var newItems []*token
 	for _, l := range m {
-		new = append(new, l...)
+		newItems = append(newItems, l...)
 	}
 
-	return new
+	return newItems
 }
 
 func parseInternal(s *source, state *state, verbose bool, nested int, first bool) (*subPattern, error) {
@@ -331,7 +331,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 					}
 
 					if ch == ']' {
-						if code1.opcode == IN {
+						if code1.opcode == opIn {
 							code1 = code1.items[0]
 						}
 
@@ -351,13 +351,13 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 					lo := code1.c
 					hi := code2.c
 
-					if code1.opcode != LITERAL || code2.opcode != LITERAL || hi < lo {
+					if code1.opcode != opLiteral || code2.opcode != opLiteral || hi < lo {
 						return nil, fmt.Errorf("bad character range %s", s.orig[tmpPos:s.tell()])
 					}
 
-					set = append(set, newRange(RANGE, lo, hi))
+					set = append(set, newRange(opRange, lo, hi))
 				} else {
-					if code1.opcode == IN {
+					if code1.opcode == opIn {
 						code1 = code1.items[0]
 					}
 					set = append(set, code1)
@@ -366,20 +366,20 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 
 			set = unique(set)
 
-			if len(set) == 1 && set[0].opcode == LITERAL {
+			if len(set) == 1 && set[0].opcode == opLiteral {
 				if negate {
-					sp.append(newCharToken(NOT_LITERAL, set[0].c))
+					sp.append(newCharToken(opNotLiteral, set[0].c))
 				} else {
 					sp.append(set[0])
 				}
 			} else {
 				if negate {
-					set = slices.Insert(set, 0, newEmptyToken(NEGATE))
+					set = slices.Insert(set, 0, newEmptyToken(opNegate))
 				}
 
 				// charmap optimization can't be added here because
 				// global flags still are not known
-				sp.append(newItemsToken(IN, set))
+				sp.append(newItemsToken(opIn, set))
 			}
 
 		case '*', '+', '?', '{':
@@ -391,9 +391,9 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 			case '?':
 				min, max = 0, 1
 			case '*':
-				min, max = 0, MAXREPEAT
+				min, max = 0, maxRepeat
 			case '+':
-				min, max = 1, MAXREPEAT
+				min, max = 1, maxRepeat
 			case '{':
 				if next, ok := s.peek(); ok && next == '}' {
 					sp.append(newLiteral(c))
@@ -427,7 +427,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 				if hasLo {
 					min = lo
 
-					if min >= MAXREPEAT {
+					if min >= maxRepeat {
 						return nil, errors.New("the repetition number is too large")
 					}
 				} else {
@@ -437,14 +437,14 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 				if hasHi {
 					max = hi
 
-					if max >= MAXREPEAT {
+					if max >= maxRepeat {
 						return nil, errors.New("the repetition number is too large")
 					}
 					if max < min {
 						return nil, errors.New("min repeat greater than max repeat")
 					}
 				} else {
-					max = MAXREPEAT
+					max = maxRepeat
 				}
 			default:
 				return nil, fmt.Errorf("unsupported quantifier '%c'", c)
@@ -455,7 +455,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 			if sp.len() > 0 {
 				item = sp.get(-1)
 			}
-			if item == nil || item.opcode == AT {
+			if item == nil || item.opcode == opAt {
 				return nil, errors.New("nothing to repeat")
 			}
 			if isRepeatCode(item.opcode) {
@@ -463,7 +463,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 			}
 
 			var subitem *subPattern
-			if item.opcode == SUBPATTERN {
+			if item.opcode == opSubpattern {
 				p := item.params.(*paramSubPattern)
 				if p.group == -1 && p.addFlags == 0 && p.delFlags == 0 {
 					subitem = p.p
@@ -476,17 +476,17 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 
 			if s.match('?') {
 				// Non-Greedy Match
-				sp.set(-1, newRepeat(MIN_REPEAT, min, max, subitem))
+				sp.set(-1, newRepeat(opMinRepeat, min, max, subitem))
 			} else if s.match('+') {
 				// Possessive Match (Always Greedy)
-				sp.set(-1, newRepeat(POSSESSIVE_REPEAT, min, max, subitem))
+				sp.set(-1, newRepeat(opPossessiveRepeat, min, max, subitem))
 			} else {
 				// Greedy Match
-				sp.set(-1, newRepeat(MAX_REPEAT, min, max, subitem))
+				sp.set(-1, newRepeat(opMaxRepeat, min, max, subitem))
 			}
 
 		case '.':
-			sp.append(newEmptyToken(ANY))
+			sp.append(newEmptyToken(opAny))
 
 		case '(':
 			capture := true
@@ -541,7 +541,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 							return nil, err
 						}
 
-						sp.append(newGrouprefToken(GROUPREF, gid))
+						sp.append(newGrouprefToken(opGroupref, gid))
 						continue
 
 					} else {
@@ -605,11 +605,11 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 					}
 
 					if char == '=' {
-						sp.append(newAssertToken(ASSERT, dir, p))
+						sp.append(newAssertToken(opAssert, dir, p))
 					} else if p.len() > 0 {
-						sp.append(newAssertToken(ASSERT_NOT, dir, p))
+						sp.append(newAssertToken(opAssertNot, dir, p))
 					} else {
-						sp.append(newEmptyToken(FAILURE))
+						sp.append(newEmptyToken(opFailure))
 					}
 
 					continue
@@ -635,7 +635,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 						if ugroup == 0 {
 							return nil, errors.New("bad group number")
 						}
-						if ugroup >= MAXGROUPS {
+						if ugroup >= maxGroups {
 							return nil, fmt.Errorf("invalid group reference %d", condgroup)
 						}
 
@@ -673,7 +673,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 						return nil, errors.New("missing ), unterminated subpattern")
 					}
 
-					sp.append(newGrouprefExistsToken(GROUPREF_EXISTS, condgroup, itemYes, itemNo))
+					sp.append(newGrouprefExistsToken(opGrouprefExists, condgroup, itemYes, itemNo))
 					continue
 
 				case '>':
@@ -730,22 +730,22 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 			}
 
 			if atomic {
-				sp.append(newWithSubPattern(ATOMIC_GROUP, p))
+				sp.append(newWithSubPattern(opAtomicGroup, p))
 			} else {
-				sp.append(newSubPattern(SUBPATTERN, group, addFlags, delFlags, p))
+				sp.append(newSubPattern(opSubpattern, group, addFlags, delFlags, p))
 			}
 
 		case '^':
-			sp.append(newAtToken(AT, AT_BEGINNING))
+			sp.append(newAtToken(opAt, atBeginning))
 		case '$':
-			sp.append(newAtToken(AT, AT_END))
+			sp.append(newAtToken(opAt, atEnd))
 		}
 	}
 
 	// unpack non-capturing groups
 	for i := sp.len() - 1; i >= 0; i-- {
 		t := sp.get(i)
-		if t.opcode == SUBPATTERN {
+		if t.opcode == opSubpattern {
 			p := t.params.(*paramSubPattern)
 			if p.group == -1 && p.addFlags == 0 && p.delFlags == 0 {
 				sp.replace(i, p.p)
@@ -866,7 +866,7 @@ func parseEscape(s *source, state *state, inCls bool) (*token, error) {
 					return nil, err
 				}
 
-				return newGrouprefToken(GROUPREF, group), nil
+				return newGrouprefToken(opGroupref, group), nil
 			}
 
 			return nil, fmt.Errorf("invalid group reference %d", value)
@@ -892,7 +892,7 @@ func parseEscape(s *source, state *state, inCls bool) (*token, error) {
 		if inCls {
 			return newLiteral('\b'), nil
 		} else {
-			return newAtToken(AT, AT_BOUNDARY), nil
+			return newAtToken(opAt, atBoundary), nil
 		}
 	case 'f':
 		return newLiteral('\f'), nil
@@ -911,28 +911,28 @@ func parseEscape(s *source, state *state, inCls bool) (*token, error) {
 	case 'A':
 		// start of string
 		if !inCls {
-			return newAtToken(AT, AT_BEGINNING_STRING), nil
+			return newAtToken(opAt, atBeginningString), nil
 		}
 	case 'B':
 		if !inCls {
-			return newAtToken(AT, AT_NON_BOUNDARY), nil
+			return newAtToken(opAt, atNonBoundary), nil
 		}
 	case 'd':
-		return newItemsToken(IN, []*token{newCategoryToken(CATEGORY, CATEGORY_DIGIT)}), nil
+		return newItemsToken(opIn, []*token{newCategoryToken(opCategory, categoryDigit)}), nil
 	case 'D':
-		return newItemsToken(IN, []*token{newCategoryToken(CATEGORY, CATEGORY_NOT_DIGIT)}), nil
+		return newItemsToken(opIn, []*token{newCategoryToken(opCategory, categoryNotDigit)}), nil
 	case 's':
-		return newItemsToken(IN, []*token{newCategoryToken(CATEGORY, CATEGORY_SPACE)}), nil
+		return newItemsToken(opIn, []*token{newCategoryToken(opCategory, categorySpace)}), nil
 	case 'S':
-		return newItemsToken(IN, []*token{newCategoryToken(CATEGORY, CATEGORY_NOT_SPACE)}), nil
+		return newItemsToken(opIn, []*token{newCategoryToken(opCategory, categoryNotSpace)}), nil
 	case 'w':
-		return newItemsToken(IN, []*token{newCategoryToken(CATEGORY, CATEGORY_WORD)}), nil
+		return newItemsToken(opIn, []*token{newCategoryToken(opCategory, categoryWord)}), nil
 	case 'W':
-		return newItemsToken(IN, []*token{newCategoryToken(CATEGORY, CATEGORY_NOT_WORD)}), nil
+		return newItemsToken(opIn, []*token{newCategoryToken(opCategory, categoryNotWord)}), nil
 	case 'Z':
 		// end of string
 		if !inCls {
-			return newAtToken(AT, AT_END_STRING), nil
+			return newAtToken(opAt, atEndString), nil
 		}
 	default:
 		if !isASCIILetter(c) {

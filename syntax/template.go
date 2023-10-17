@@ -171,7 +171,7 @@ func extractGroup(s Indexer, template string, isString bool) (index int, rest st
 			return
 		}
 	} else {
-		if uindex >= MAXGROUPS {
+		if uindex >= maxGroups {
 			err = fmt.Errorf("invalid group reference %d", index)
 			return
 		}

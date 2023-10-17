@@ -96,7 +96,7 @@ func getFlag(c rune) uint32 {
 
 func isRepeatCode(o opcode) bool {
 	switch o {
-	case MIN_REPEAT, MAX_REPEAT, POSSESSIVE_REPEAT:
+	case opMinRepeat, opMaxRepeat, opPossessiveRepeat:
 		return true
 	default:
 		return false

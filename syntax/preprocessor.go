@@ -99,13 +99,13 @@ func (p *Preprocessor) String() string {
 	return b.String()
 }
 
-var unicodeRanges = map[chCode][]rune{
-	CATEGORY_DIGIT:     buildRange(`[\p{Nd}]`),
-	CATEGORY_NOT_DIGIT: buildRange(`[^\p{Nd}]`),
-	CATEGORY_SPACE:     buildRange(`[\p{Z}\v]`),
-	CATEGORY_NOT_SPACE: buildRange(`[^\p{Z}\v]`),
-	CATEGORY_WORD:      buildRange(`[\p{L}\p{N}_]`),
-	CATEGORY_NOT_WORD:  buildRange(`[^\p{L}\p{N}_]`),
+var unicodeRanges = map[catcode][]rune{
+	categoryDigit:    buildRange(`[\p{Nd}]`),
+	categoryNotDigit: buildRange(`[^\p{Nd}]`),
+	categorySpace:    buildRange(`[\p{Z}\v]`),
+	categoryNotSpace: buildRange(`[^\p{Z}\v]`),
+	categoryWord:     buildRange(`[\p{L}\p{N}_]`),
+	categoryNotWord:  buildRange(`[^\p{L}\p{N}_]`),
 }
 
 // While it is simple to include the negated character class of `\d` in a character set (by using \P{Nd}),
@@ -158,7 +158,7 @@ func (p *Preprocessor) defaultReplacer(w *subPatternWriter, t *token, ctx *subPa
 	}
 
 	switch t.opcode {
-	case CATEGORY:
+	case opCategory:
 		// If the current pattern is a string and the ASCII mode is not enabled,
 		// some patterns had to be replaced with some equivalent unicode counterpart,
 		// because by default, `regexp` only matches ASCII patterns.
@@ -170,7 +170,7 @@ func (p *Preprocessor) defaultReplacer(w *subPatternWriter, t *token, ctx *subPa
 		// Always inside of character sets.
 		pm := t.params.(paramCategory)
 
-		unirange, ok := unicodeRanges[chCode(pm)]
+		unirange, ok := unicodeRanges[catcode(pm)]
 		if !ok {
 			return false
 		}
@@ -184,7 +184,7 @@ func (p *Preprocessor) defaultReplacer(w *subPatternWriter, t *token, ctx *subPa
 				w.writeLiteral(hi)
 			}
 		}
-	case LITERAL:
+	case opLiteral:
 		if !asciiCase {
 			return false
 		}
@@ -203,7 +203,7 @@ func (p *Preprocessor) defaultReplacer(w *subPatternWriter, t *token, ctx *subPa
 			w.writeLiteral(t.c)
 			w.writeLiteral(o)
 		}
-	case RANGE:
+	case opRange:
 		if !asciiCase {
 			return false
 		}
@@ -255,7 +255,7 @@ func (p *Preprocessor) FallbackString() (string, map[string]int) {
 			return true
 		}
 
-		if t.opcode == SUBPATTERN {
+		if t.opcode == opSubpattern {
 			p := t.params.(*paramSubPattern)
 
 			// The preprocessor must only write subpatterns differently,

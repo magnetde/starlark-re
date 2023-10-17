@@ -4,7 +4,7 @@ import "math"
 
 // To install stringer: go install golang.org/x/tools/cmd/stringer@latest
 //
-//go:generate stringer -type=opcode,atCode,chCode -output=constants_string.go
+//go:generate stringer -type=opcode,atcode,catcode -linecomment -output=constants_string.go
 
 // Possible flags for the flag parameter.
 const (
@@ -21,52 +21,52 @@ const (
 )
 
 const (
-	MAXREPEAT = math.MaxInt
-	MAXGROUPS = math.MaxInt / 2
+	maxRepeat = math.MaxInt
+	maxGroups = math.MaxInt / 2
 )
 
 type opcode uint32
 
 const (
-	FAILURE opcode = iota
-	ANY
-	ASSERT
-	ASSERT_NOT
-	AT
-	BRANCH
-	CATEGORY
-	GROUPREF
-	GROUPREF_EXISTS
-	IN
-	LITERAL
-	MIN_REPEAT
-	MAX_REPEAT
-	NOT_LITERAL
-	NEGATE
-	RANGE
-	SUBPATTERN
-	ATOMIC_GROUP
-	POSSESSIVE_REPEAT
+	opFailure          opcode = iota // FAILURE
+	opAny                            // ANY
+	opAssert                         // ASSERT
+	opAssertNot                      // ASSERT_NOT
+	opAt                             // AT
+	opBranch                         // BRANCH
+	opCategory                       // CATEGORY
+	opGroupref                       // GROUPREF
+	opGrouprefExists                 // GROUPREF_EXISTS
+	opIn                             // IN
+	opLiteral                        // LITERAL
+	opMinRepeat                      // MIN_REPEAT
+	opMaxRepeat                      // MAX_REPEAT
+	opNotLiteral                     // NOT_LITERAL
+	opNegate                         // NEGATE
+	opRange                          // RANGE
+	opSubpattern                     // SUBPATTERN
+	opAtomicGroup                    // ATOMIC_GROUP
+	opPossessiveRepeat               // POSSESSIVE_REPEAT
 )
 
-type atCode uint32
+type atcode uint32
 
 const (
-	AT_BEGINNING atCode = iota
-	AT_BEGINNING_STRING
-	AT_BOUNDARY
-	AT_NON_BOUNDARY
-	AT_END
-	AT_END_STRING
+	atBeginning       atcode = iota // AT_BEGINNING
+	atBeginningString               // AT_BEGINNING_STRING
+	atBoundary                      // AT_BOUNDARY
+	atNonBoundary                   // AT_NON_BOUNDARY
+	atEnd                           // AT_END
+	atEndString                     // AT_END_STRING
 )
 
-type chCode uint32
+type catcode uint32
 
 const (
-	CATEGORY_DIGIT chCode = iota
-	CATEGORY_NOT_DIGIT
-	CATEGORY_SPACE
-	CATEGORY_NOT_SPACE
-	CATEGORY_WORD
-	CATEGORY_NOT_WORD
+	categoryDigit    catcode = iota // CATEGORY_DIGIT
+	categoryNotDigit                // CATEGORY_NOT_DIGIT
+	categorySpace                   // CATEGORY_SPACE
+	categoryNotSpace                // CATEGORY_NOT_SPACE
+	categoryWord                    // CATEGORY_WORD
+	categoryNotWord                 // CATEGORY_NOT_WORD
 )
