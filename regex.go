@@ -356,7 +356,7 @@ func getRuneOffsets(s string) ([]rune, []int, []int) {
 	return chars, offsetsRune, offsetsByte
 }
 
-func (i *advInput) Find(pos int, longest bool, dstCap []int) ([]int, error) {
+func (i *advInput) Find(pos int, _ bool, dstCap []int) ([]int, error) {
 	if i.offsetsRune != nil {
 		pos = i.offsetsRune[pos]
 	}
@@ -371,7 +371,7 @@ func (i *advInput) Find(pos int, longest bool, dstCap []int) ([]int, error) {
 	}
 
 	groups := m.Groups()
-	a := make([]int, 2*len(groups))
+	a := growSlice(dstCap, 2*len(groups))
 
 	for index, g := range groups {
 		if i.re.groupMapping != nil { // maybe the index needs a remap
@@ -394,4 +394,27 @@ func (i *advInput) Find(pos int, longest bool, dstCap []int) ([]int, error) {
 
 	applyOffsets(a, i.offsetsByte)
 	return a, nil
+}
+
+// growSlice increases the slice's size, if necessary, to guarantee a size
+// if n. If the previous capacity was less than n, the slice is filled with
+// elements with a value of zero. If n is negative or too large to allocate
+// the memory, growSlice panics. For safety reasons, the resulting slice is
+// filled with zero values.
+// See also slices.Grow.
+func growSlice[S ~[]E, E any](s S, n int) S {
+	var zero E
+
+	if n < 0 {
+		panic("cannot be negative")
+	}
+	if cap(s) < n {
+		s = append(s[:cap(s)], make([]E, n-cap(s))...)
+	}
+
+	s = s[:n]
+	for i := range s {
+		s[i] = zero
+	}
+	return s
 }

@@ -18,12 +18,12 @@ func (t *TemplateRule) IsLiteral() bool {
 	return t.Index < 0
 }
 
-type Indexer interface {
+type Subexp interface {
 	SubexpIndex(name string) int
 	NumSubexp() int
 }
 
-func ParseTemplate(s Indexer, template string, isString bool) ([]TemplateRule, error) {
+func ParseTemplate(s Subexp, template string, isString bool) ([]TemplateRule, error) {
 	var rules []TemplateRule
 
 	addLiteral := func(s string) {
@@ -141,7 +141,7 @@ func ParseTemplate(s Indexer, template string, isString bool) ([]TemplateRule, e
 	return rules, nil
 }
 
-func extractGroup(s Indexer, template string, isString bool) (index int, rest string, err error) {
+func extractGroup(s Subexp, template string, isString bool) (index int, rest string, err error) {
 	if template == "" || template[0] != '<' {
 		err = errors.New("missing <")
 		return

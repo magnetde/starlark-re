@@ -28,7 +28,7 @@ func findMatches(r regexEngine, s string, pos int, n int, deliver func(a []int) 
 	// But at the second time, the longest match is searched.
 	firstPass := true
 
-	var dstCap [2]int
+	var dstCap [4]int
 	for i := 0; i < n && pos <= end; {
 		a, err := in.Find(pos, !firstPass, dstCap[:0])
 		if err != nil {
