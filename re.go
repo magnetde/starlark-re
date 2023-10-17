@@ -645,7 +645,7 @@ func newPattern(pattern strOrBytes, flags int) (*Pattern, error) {
 	isStr := pattern.isString
 
 	// replace unicode patterns, that are supported by Pathon but not supported by Go
-	p, err := replacePatterns(p, isStr, flags&reFlagASCII != 0)
+	p, err := preprocessRegex(p, isStr, flags&reFlagASCII != 0)
 	if err != nil {
 		return nil, err
 	}
