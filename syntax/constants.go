@@ -8,7 +8,7 @@ import "math"
 
 // Possible flags for the flag parameter.
 const (
-	_ = 1 << iota // TEMPLATE; unused
+	_ uint32 = 1 << iota // TEMPLATE; unused
 	FlagIgnoreCase
 	FlagLocale
 	FlagMultiline

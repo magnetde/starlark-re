@@ -12,13 +12,11 @@ type Preprocessor struct {
 	p     *subPattern
 }
 
-func NewPreprocessor(s string, isStr bool, flags int) (*Preprocessor, error) {
+func NewPreprocessor(s string, isStr bool, flags uint32) (*Preprocessor, error) {
 	sp, err := parse(s, isStr, flags)
 	if err != nil {
 		return nil, err
 	}
-
-	sp.dump(nil) // TODO: remove
 
 	p := &Preprocessor{
 		isStr: isStr,
@@ -28,7 +26,7 @@ func NewPreprocessor(s string, isStr bool, flags int) (*Preprocessor, error) {
 	return p, nil
 }
 
-func (p *Preprocessor) Flags() int {
+func (p *Preprocessor) Flags() uint32 {
 	return p.p.state.flags
 }
 

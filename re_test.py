@@ -1,6 +1,7 @@
 # This file contains tests for the Starlark re module.
 # All tests where taken from CPython.
 # See also https://github.com/python/cpython/blob/main/Lib/test/test_re.py
+# The tests where modified to work with Starlark.
 
 
 # Re test suite and benchmark suite v1.5
@@ -25,7 +26,7 @@ benchmarks = [
     ('Python|Perl|Tcl', 'Perl'),        # Alternation
     ('(Python|Perl|Tcl)', 'Perl'),      # Grouped alternation
 
-    # ('(Python)\\1', 'PythonPython'),    # Backreference
+    ('(Python)\\1', 'PythonPython'),    # Backreference
     ('([0a-z][a-z0-9]*,)+', 'a5,b7,c9,'), # Disable the fastmap optimization
     ('([a-z][a-z0-9]*,)+', 'a5,b7,c9,'), # A few sets
 
@@ -69,14 +70,14 @@ tests = [
     ('(?P<foo_123>a)(?P=foo_124', 'aa', SYNTAX_ERROR),  # Backref to undefined group
 
     ('(?P<foo_123>a)', 'a', SUCCEED, 'g1', 'a'),
-    # ('(?P<foo_123>a)(?P=foo_123)', 'aa', SUCCEED, 'g1', 'a'),
+    ('(?P<foo_123>a)(?P=foo_123)', 'aa', SUCCEED, 'g1', 'a'),
 
     # Test octal escapes
     ('\\1', 'a', SYNTAX_ERROR),    # Backreference
     ('[\\1]', '\1', SUCCEED, 'found', '\1'),  # Character
     ('\\09', chr(0) + '9', SUCCEED, 'found', chr(0) + '9'),
     ('\\141', 'a', SUCCEED, 'found', 'a'),
-    # ('(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)(l)\\119', 'abcdefghijklk9', SUCCEED, 'found+"-"+g11', 'abcdefghijklk9-k'),
+    ('(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)(l)\\119', 'abcdefghijklk9', SUCCEED, 'found+"-"+g11', 'abcdefghijklk9-k'),
 
     # Test \0 is handled everywhere
     (r'\0', '\0', SUCCEED, 'found', '\0'),
@@ -94,9 +95,9 @@ tests = [
     (r'\x00ffffffffffffff', '\u00FF', FAIL, 'found', chr(255)),
     (r'\x00f', '\017', FAIL, 'found', chr(15)),
     (r'\x00fe', '\u00FE', FAIL, 'found', chr(254)),
-    # (r'\x00ffffffffffffff', '\u00FF', SUCCEED, 'found', chr(255)),
+    # (r'\x00ffffffffffffff', '\377', SUCCEED, 'found', chr(255)),
     # (r'\x00f', '\017', SUCCEED, 'found', chr(15)),
-    # (r'\x00fe', '\u00FE', SUCCEED, 'found', chr(254)),
+    # (r'\x00fe', '\376', SUCCEED, 'found', chr(254)),
 
     (r"^\w+=(\\[\000-\277]|[^\n\\])*", "SRC=eval.c g.c blah blah blah \\\\\n\tapes.c",
      SUCCEED, 'found', "SRC=eval.c g.c blah blah blah \\\\"),
@@ -236,22 +237,22 @@ tests = [
     ('\\((.*), (.*)\\)', '(a, b)', SUCCEED, 'g2+"-"+g1', 'b-a'),
     ('[k]', 'ab', FAIL),
     ('a[-]?c', 'ac', SUCCEED, 'found', 'ac'),
-    # ('(abc)\\1', 'abcabc', SUCCEED, 'g1', 'abc'),
-    # ('([a-c]*)\\1', 'abcabc', SUCCEED, 'g1', 'abc'),
+    ('(abc)\\1', 'abcabc', SUCCEED, 'g1', 'abc'),
+    ('([a-c]*)\\1', 'abcabc', SUCCEED, 'g1', 'abc'),
     ('^(.+)?B', 'AB', SUCCEED, 'g1', 'A'),
-    # ('(a+).\\1$', 'aaaaa', SUCCEED, 'found+"-"+g1', 'aaaaa-aa'),
-    # ('^(a+).\\1$', 'aaaa', FAIL),
-    # ('(abc)\\1', 'abcabc', SUCCEED, 'found+"-"+g1', 'abcabc-abc'),
-    # ('([a-c]+)\\1', 'abcabc', SUCCEED, 'found+"-"+g1', 'abcabc-abc'),
-    # ('(a)\\1', 'aa', SUCCEED, 'found+"-"+g1', 'aa-a'),
-    # ('(a+)\\1', 'aa', SUCCEED, 'found+"-"+g1', 'aa-a'),
-    # ('(a+)+\\1', 'aa', SUCCEED, 'found+"-"+g1', 'aa-a'),
-    # ('(a).+\\1', 'aba', SUCCEED, 'found+"-"+g1', 'aba-a'),
-    # ('(a)ba*\\1', 'aba', SUCCEED, 'found+"-"+g1', 'aba-a'),
-    # ('(aa|a)a\\1$', 'aaa', SUCCEED, 'found+"-"+g1', 'aaa-a'),
-    # ('(a|aa)a\\1$', 'aaa', SUCCEED, 'found+"-"+g1', 'aaa-a'),
-    # ('(a+)a\\1$', 'aaa', SUCCEED, 'found+"-"+g1', 'aaa-a'),
-    # ('([abc]*)\\1', 'abcabc', SUCCEED, 'found+"-"+g1', 'abcabc-abc'),
+    ('(a+).\\1$', 'aaaaa', SUCCEED, 'found+"-"+g1', 'aaaaa-aa'),
+    ('^(a+).\\1$', 'aaaa', FAIL),
+    ('(abc)\\1', 'abcabc', SUCCEED, 'found+"-"+g1', 'abcabc-abc'),
+    ('([a-c]+)\\1', 'abcabc', SUCCEED, 'found+"-"+g1', 'abcabc-abc'),
+    ('(a)\\1', 'aa', SUCCEED, 'found+"-"+g1', 'aa-a'),
+    ('(a+)\\1', 'aa', SUCCEED, 'found+"-"+g1', 'aa-a'),
+    ('(a+)+\\1', 'aa', SUCCEED, 'found+"-"+g1', 'aa-a'),
+    ('(a).+\\1', 'aba', SUCCEED, 'found+"-"+g1', 'aba-a'),
+    ('(a)ba*\\1', 'aba', SUCCEED, 'found+"-"+g1', 'aba-a'),
+    ('(aa|a)a\\1$', 'aaa', SUCCEED, 'found+"-"+g1', 'aaa-a'),
+    ('(a|aa)a\\1$', 'aaa', SUCCEED, 'found+"-"+g1', 'aaa-a'),
+    ('(a+)a\\1$', 'aaa', SUCCEED, 'found+"-"+g1', 'aaa-a'),
+    ('([abc]*)\\1', 'abcabc', SUCCEED, 'found+"-"+g1', 'abcabc-abc'),
     ('(a)(b)c|ab', 'ab', SUCCEED, 'found+"-"+g1+"-"+g2', 'ab-None-None'),
     ('(a)+x', 'aaax', SUCCEED, 'found+"-"+g1', 'aaax-a'),
     ('([ac])+x', 'aacx', SUCCEED, 'found+"-"+g1', 'aacx-c'),
@@ -268,8 +269,8 @@ tests = [
 
     ('(?P<i d>aaa)a', 'aaaa', SYNTAX_ERROR),
     ('(?P<id>aaa)a', 'aaaa', SUCCEED, 'found+"-"+id', 'aaaa-aaa'),
-    # ('(?P<id>aa)(?P=id)', 'aaaa', SUCCEED, 'found+"-"+id', 'aaaa-aa'),
-    # ('(?P<id>aa)(?P=xd)', 'aaaa', SYNTAX_ERROR),
+    ('(?P<id>aa)(?P=id)', 'aaaa', SUCCEED, 'found+"-"+id', 'aaaa-aa'),
+    ('(?P<id>aa)(?P=xd)', 'aaaa', SYNTAX_ERROR),
 
     # Test octal escapes/memory references
 
@@ -301,7 +302,7 @@ tests = [
     ('([abc])*bcd', 'abcd', SUCCEED, 'found+"-"+g1', 'abcd-a'),
     ('^(ab|cd)e', 'abcde', FAIL),
     ('((((((((((a))))))))))', 'a', SUCCEED, 'g10', 'a'),
-    # ('((((((((((a))))))))))\\10', 'aa', SUCCEED, 'found', 'aa'),
+    ('((((((((((a))))))))))\\10', 'aa', SUCCEED, 'found', 'aa'),
 # Python does not have the same rules for \\41 so this is a syntax error
 #    ('((((((((((a))))))))))\\41', 'aa', FAIL),
 #    ('((((((((((a))))))))))\\41', 'a!', SUCCEED, 'found', 'a!'),
@@ -423,7 +424,7 @@ tests = [
     ('(?i)(bc+d$|ef*g.|h?i(j|k))', 'BCDD', FAIL),
     ('(?i)(bc+d$|ef*g.|h?i(j|k))', 'REFFGZ', SUCCEED, 'found+"-"+g1+"-"+g2', 'EFFGZ-EFFGZ-None'),
     ('(?i)((((((((((a))))))))))', 'A', SUCCEED, 'g10', 'A'),
-    #('(?i)((((((((((a))))))))))\\10', 'AA', SUCCEED, 'found', 'AA'),
+    ('(?i)((((((((((a))))))))))\\10', 'AA', SUCCEED, 'found', 'AA'),
     #('(?i)((((((((((a))))))))))\\41', 'AA', FAIL),
     #('(?i)((((((((((a))))))))))\\41', 'A!', SUCCEED, 'found', 'A!'),
     ('(?i)(((((((((a)))))))))', 'A', SUCCEED, 'found', 'A'),
@@ -437,27 +438,27 @@ tests = [
 #    ('(?i)abcd', 'ABCD', SUCCEED, 'found+"-"+\\found+"-"+\\\\found', 'ABCD-$&-\\ABCD'),
 #    ('(?i)a(bc)d', 'ABCD', SUCCEED, 'g1+"-"+\\g1+"-"+\\\\g1', 'BC-$1-\\BC'),
     ('(?i)a[-]?c', 'AC', SUCCEED, 'found', 'AC'),
-    #('(?i)(abc)\\1', 'ABCABC', SUCCEED, 'g1', 'ABC'),
-    #('(?i)([a-c]*)\\1', 'ABCABC', SUCCEED, 'g1', 'ABC'),
-    #('a(?!b).', 'abad', SUCCEED, 'found', 'ad'),
-    #('a(?=d).', 'abad', SUCCEED, 'found', 'ad'),
-    #('a(?=c|d).', 'abad', SUCCEED, 'found', 'ad'),
+    ('(?i)(abc)\\1', 'ABCABC', SUCCEED, 'g1', 'ABC'),
+    ('(?i)([a-c]*)\\1', 'ABCABC', SUCCEED, 'g1', 'ABC'),
+    ('a(?!b).', 'abad', SUCCEED, 'found', 'ad'),
+    ('a(?=d).', 'abad', SUCCEED, 'found', 'ad'),
+    ('a(?=c|d).', 'abad', SUCCEED, 'found', 'ad'),
     ('a(?:b|c|d)(.)', 'ace', SUCCEED, 'g1', 'e'),
     ('a(?:b|c|d)*(.)', 'ace', SUCCEED, 'g1', 'e'),
     ('a(?:b|c|d)+?(.)', 'ace', SUCCEED, 'g1', 'e'),
     ('a(?:b|(c|e){1,2}?|d)+?(.)', 'ace', SUCCEED, 'g1 + g2', 'ce'),
 
     # lookbehind: split by : but not if it is escaped by -.
-    #('(?<!-):(.*?)(?<!-):', 'a:bc-:de:f', SUCCEED, 'g1', 'bc-:de' ),
+    ('(?<!-):(.*?)(?<!-):', 'a:bc-:de:f', SUCCEED, 'g1', 'bc-:de' ),
     # escaping with \ as we know it
-    #('(?<!\\\\):(.*?)(?<!\\\\):', 'a:bc\\:de:f', SUCCEED, 'g1', 'bc\\:de' ),
+    ('(?<!\\\\):(.*?)(?<!\\\\):', 'a:bc\\:de:f', SUCCEED, 'g1', 'bc\\:de' ),
     # terminating with ' and escaping with ? as in edifact
-    #("(?<!\\?)'(.*?)(?<!\\?)'", "a'bc?'de'f", SUCCEED, 'g1', "bc?'de" ),
+    ("(?<!\\?)'(.*?)(?<!\\?)'", "a'bc?'de'f", SUCCEED, 'g1', "bc?'de" ),
 
     # Comments using the (?#...) syntax
 
-    #('w(?# comment', 'w', SYNTAX_ERROR),
-    #('w(?# comment 1)xy(?# comment 2)z', 'wxyz', SUCCEED, 'found', 'wxyz'),
+    ('w(?# comment', 'w', SYNTAX_ERROR),
+    ('w(?# comment 1)xy(?# comment 2)z', 'wxyz', SUCCEED, 'found', 'wxyz'),
 
     # Check odd placement of embedded pattern modifiers
 
@@ -467,10 +468,10 @@ tests = [
 
     # Comments using the x embedded pattern modifier
 
-    #("""(?x)w# comment 1
-    #    x y
-    #    # comment 2
-    #    z""", 'wxyz', SUCCEED, 'found', 'wxyz'),
+    ("""(?x)w# comment 1
+        x y
+        # comment 2
+        z""", 'wxyz', SUCCEED, 'found', 'wxyz'),
 
     # using the m embedded pattern modifier
 
@@ -502,7 +503,7 @@ xyzabc
     (r'\xff', '\u00FF', SUCCEED, 'found', chr(255)),
     # new \x semantics
     (r'\x00ff', '\u00FF', FAIL),
-    # (r'\x00ff', '\u00FF', SUCCEED, 'found', chr(255)),
+    # (r'\x00ff', '\377', SUCCEED, 'found', chr(255)),
     (r'\t\n\v\r\f\a', '\t\n\v\r\f\a', SUCCEED, 'found', '\t\n\v\r\f\a'),
     ('\t\n\v\r\f\a', '\t\n\v\r\f\a', SUCCEED, 'found', '\t\n\v\r\f\a'),
     (r'\t\n\v\r\f\a', '\t\n\v\r\f\a', SUCCEED, 'found', chr(9)+chr(10)+chr(11)+chr(13)+chr(12)+chr(7)),
@@ -520,11 +521,12 @@ xyzabc
     # bug 112468: various expected syntax errors
     (r'(', '', SYNTAX_ERROR),
     (r'[\41]', '!', SUCCEED, 'found', '!'),
+    # bug 114033: nothing to repeat
     (r'(x?)?', 'x', SUCCEED, 'found', 'x'),
     # bug 115040: rescan if flags are modified inside pattern
-    #(r'(?x) foo ', 'foo', SUCCEED, 'found', 'foo'),
+    (r'(?x) foo ', 'foo', SUCCEED, 'found', 'foo'),
     # bug 115618: negative lookahead
-    #(r'(?<!abc)(d.f)', 'abcdefdof', SUCCEED, 'found', 'dof'),
+    (r'(?<!abc)(d.f)', 'abcdefdof', SUCCEED, 'found', 'dof'),
     # bug 116251: character class bug
     (r'[\w-]+', 'laser_beam', SUCCEED, 'found', 'laser_beam'),
     # bug 123769+127259: non-greedy backtracking bug
@@ -532,14 +534,14 @@ xyzabc
     (r'a[ ]*?\ (\d+).*', 'a   10', SUCCEED, 'found', 'a   10'),
     (r'a[ ]*?\ (\d+).*', 'a    10', SUCCEED, 'found', 'a    10'),
     # bug 127259: \Z shouldn't depend on multiline mode
-    #(r'(?ms).*?x\s*\Z(.*)','xx\nx\n', SUCCEED, 'g1', ''),
+    (r'(?ms).*?x\s*\Z(.*)','xx\nx\n', SUCCEED, 'g1', ''),
     # bug 128899: uppercase literals under the ignorecase flag
     (r'(?i)M+', 'MMM', SUCCEED, 'found', 'MMM'),
     (r'(?i)m+', 'MMM', SUCCEED, 'found', 'MMM'),
     (r'(?i)[M]+', 'MMM', SUCCEED, 'found', 'MMM'),
     (r'(?i)[m]+', 'MMM', SUCCEED, 'found', 'MMM'),
     # bug 130748: ^* should be an error (nothing to repeat)
-    #(r'^*', '', SYNTAX_ERROR),
+    (r'^*', '', SYNTAX_ERROR),
     # bug 133283: minimizing repeat problem
     (r'"(?:\\"|[^"])*?"', r'"\""', SUCCEED, 'found', r'"\""'),
     # bug 477728: minimizing repeat problem
@@ -551,21 +553,21 @@ xyzabc
     # bug 470582: nested groups problem
     (r'^((a)c)?(ab)$', 'ab', SUCCEED, 'g1+"-"+g2+"-"+g3', 'None-None-ab'),
     # another minimizing repeat problem (capturing groups in assertions)
-    #('^([ab]*?)(?=(b)?)c', 'abc', SUCCEED, 'g1+"-"+g2', 'ab-None'),
-    #('^([ab]*?)(?!(b))c', 'abc', SUCCEED, 'g1+"-"+g2', 'ab-None'),
-    #('^([ab]*?)(?<!(a))c', 'abc', SUCCEED, 'g1+"-"+g2', 'ab-None'),
+    ('^([ab]*?)(?=(b)?)c', 'abc', SUCCEED, 'g1+"-"+g2', 'ab-None'),
+    ('^([ab]*?)(?!(b))c', 'abc', SUCCEED, 'g1+"-"+g2', 'ab-None'),
+    ('^([ab]*?)(?<!(a))c', 'abc', SUCCEED, 'g1+"-"+g2', 'ab-None'),
 ]
 
-u = 'Ä'
+u = '\u00C4'
 tests.extend([
     # bug 410271: \b broken under locales
-    (r'\b.\b', 'a', SUCCEED, 'found', 'a'),
-    #(r'(?u)\b.\b', u, SUCCEED, 'found', u),
-    #(r'(?u)\w', u, SUCCEED, 'found', u),
+    # (r'\b.\b', 'a', SUCCEED, 'found', 'a'),
+    # (r'(?u)\b.\b', u, SUCCEED, 'found', u),
+    # (r'(?u)\w', u, SUCCEED, 'found', u),
 ])
 
 
-# Dummies to fix Python warnings
+# Add dummy assignments to fix Python warnings.
 re = re
 assertEqual = assertEqual
 assertNotEqual = assertNotEqual
@@ -586,21 +588,46 @@ measure = measure
 trycatch = trycatch
 fail = fail
 
-# Add some helper functions to replace missing types
-def bytearray(b): return b
-def memoryview(b): return b
-def pow(x, n):
-    r = 1
-    while n:
-        if n & 1:
-            r *= x
-        x *= x
-        n //= 2
-    return r
+# replacement for str % (...)
+def format(s, *args):
+    r = re.compile(r'%(?P<flags>[-+#0])?(?P<width>\d+|\*)?(?:\.(?P<precision>\d+|\*))?(?P<length>[hljztL]|hh|ll)?(?P<specifier>[diuoxXfFeEgGaAcspn])')
 
-# Change the former classes S und B to identify functions
-def S(s): return s
-def B(b): return b
+    def to_base(n, b):
+        res = ""
+        while n:
+            res += "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"[n % b]
+            n //= b
+        return res[::-1] or "0"
+
+    index = [0] # workaround for missing nonlocal
+
+    def subfmt(m):
+        i = index[0]
+        arg = args[i]
+        if i > len(args): return repr(arg)
+
+        flags, width, precision, length, specifier = m.groups()
+
+        if specifier == "o": v = to_base(int(arg), 8)
+        elif specifier == "x": v = to_base(int(arg), 16)
+        else: fail("format:", flags, width, precision, length, specifier)
+
+        if width != None:
+            w = int(width)
+            if w > 0:
+                v = max(w - len(v), 0) * (" " if flags == None else flags) + v
+
+        index[0] += 1
+        return v
+
+    return r.sub(subfmt, s)
+
+# fix for starlark; bcat = bytes concat
+def bcat(*args):
+    l = []
+    for arg in args:
+        l += list(arg.elems())
+    return bytes(l)
 
 def assertTypedEqual(actual, expect, msg=None):
     assertEqual(actual, expect, msg)
@@ -612,10 +639,10 @@ def assertTypedEqual(actual, expect, msg=None):
             assertIs(type(actual), type(expect), msg)
     recurse(actual, expect)
 
-def checkPatternError(pattern, errmsg, pos=None):
+def checkPatternError(pattern, errmsg):
     assertRaises(lambda: re.compile(pattern), errmsg)
 
-def checkTemplateError(pattern, repl, string, errmsg, pos=None):
+def checkTemplateError(pattern, repl, string, errmsg):
     assertRaises(lambda: re.sub(pattern, repl, string), errmsg)
 
 def checkSyntaxError(pattern, syntax):
@@ -656,11 +683,7 @@ def bump_num(matchobj):
 
 def test_basic_re_sub():
     assertTypedEqual(re.sub('y', 'a', 'xyz'), 'xaz')
-    assertTypedEqual(re.sub('y', S('a'), S('xyz')), 'xaz')
     assertTypedEqual(re.sub(b'y', b'a', b'xyz'), b'xaz')
-    assertTypedEqual(re.sub(b'y', B(b'a'), B(b'xyz')), b'xaz')
-    assertTypedEqual(re.sub(b'y', bytearray(b'a'), bytearray(b'xyz')), b'xaz')
-    assertTypedEqual(re.sub(b'y', memoryview(b'a'), memoryview(b'xyz')), b'xaz')
     for y in ("\u00E0", "\u0430", "\U0001d49c"):
         assertEqual(re.sub(y, 'a', 'x%sz' % y), 'xaz')
 
@@ -745,24 +768,24 @@ def test_sub_template_numeric_escape():
 
     checkTemplateError('x', r'\400', 'x',
                             r'octal escape value \400 outside of ' +
-                            r'range 0-0o377', 0)
+                            r'range 0-0o377')
     checkTemplateError('x', r'\777', 'x',
                             r'octal escape value \777 outside of ' +
-                            r'range 0-0o377', 0)
+                            r'range 0-0o377')
 
-    checkTemplateError('x', r'\1', 'x', 'invalid group reference 1', 1)
-    checkTemplateError('x', r'\8', 'x', 'invalid group reference 8', 1)
-    checkTemplateError('x', r'\9', 'x', 'invalid group reference 9', 1)
-    checkTemplateError('x', r'\11', 'x', 'invalid group reference 11', 1)
-    checkTemplateError('x', r'\18', 'x', 'invalid group reference 18', 1)
-    checkTemplateError('x', r'\1a', 'x', 'invalid group reference 1', 1)
-    checkTemplateError('x', r'\90', 'x', 'invalid group reference 90', 1)
-    checkTemplateError('x', r'\99', 'x', 'invalid group reference 99', 1)
-    checkTemplateError('x', r'\118', 'x', 'invalid group reference 11', 1)
-    checkTemplateError('x', r'\11a', 'x', 'invalid group reference 11', 1)
-    checkTemplateError('x', r'\181', 'x', 'invalid group reference 18', 1)
-    checkTemplateError('x', r'\800', 'x', 'invalid group reference 80', 1)
-    checkTemplateError('x', r'\8', '', 'invalid group reference 8', 1)
+    checkTemplateError('x', r'\1', 'x', 'invalid group reference 1')
+    checkTemplateError('x', r'\8', 'x', 'invalid group reference 8')
+    checkTemplateError('x', r'\9', 'x', 'invalid group reference 9')
+    checkTemplateError('x', r'\11', 'x', 'invalid group reference 11')
+    checkTemplateError('x', r'\18', 'x', 'invalid group reference 18')
+    checkTemplateError('x', r'\1a', 'x', 'invalid group reference 1')
+    checkTemplateError('x', r'\90', 'x', 'invalid group reference 90')
+    checkTemplateError('x', r'\99', 'x', 'invalid group reference 99')
+    checkTemplateError('x', r'\118', 'x', 'invalid group reference 11')
+    checkTemplateError('x', r'\11a', 'x', 'invalid group reference 11')
+    checkTemplateError('x', r'\181', 'x', 'invalid group reference 18')
+    checkTemplateError('x', r'\800', 'x', 'invalid group reference 80')
+    checkTemplateError('x', r'\8', '', 'invalid group reference 8')
 
     # in python2.3 (etc), these loop endlessly in sre_parser.py
     assertEqual(re.sub('(((((((((((x)))))))))))', r'\11', 'x'), 'x')
@@ -777,11 +800,11 @@ def test_qualified_re_sub():
     assertEqual(re.sub('a', 'b', 'aaaaa', count=1), 'baaaa')
 
     assertRaisesRegex(lambda: re.sub('a', 'b', 'aaaaa', 1, count=1),
-                      r"sub: got multiple values for keyword argument \"count\"")
+                      r'sub: got multiple values for keyword argument "count"')
     assertRaisesRegex(lambda: re.sub('a', 'b', 'aaaaa', 1, 0, flags=0),
-                      r"sub: got multiple values for keyword argument \"flags\"")
+                      r'sub: got multiple values for keyword argument "flags"')
     assertRaisesRegex(lambda: re.sub('a', 'b', 'aaaaa', 1, 0, 0),
-                      r"sub: got 6 arguments, want at most 5")
+                      r'sub: got 6 arguments, want at most 5')
 
 def test_misuse_flags():
     assertEqual(re.sub('a', 'b', 'aaaaa', re.I),
@@ -796,103 +819,101 @@ def test_bug_114660():
                         'hello there')
 
 def test_symbolic_groups():
-    err = 'invalid or unsupported Perl syntax: `(?P`'
-    assertRaises(lambda: re.compile(r'(?P<a>x)(?P=a)(?(a)y)'), err)
-    assertRaises(lambda: re.compile(r'(?P<a1>x)(?P=a1)(?(a1)y)'), err)
-    assertRaises(lambda: re.compile(r'(?P<a1>x)\1(?(1)y)'), 'invalid group reference 1')
-    assertRaises(lambda: re.compile(b'(?P<a1>x)(?P=a1)(?(a1)y)'), err)
+    re.compile(r'(?P<a>x)(?P=a)(?(a)y)')
+    re.compile(r'(?P<a1>x)(?P=a1)(?(a1)y)')
+    re.compile(r'(?P<a1>x)\1(?(1)y)')
+    re.compile(b'(?P<a1>x)(?P=a1)(?(a1)y)')
     # New valid identifiers in Python 3
-    assertRaises(lambda: re.compile('(?P<µ>x)(?P=µ)(?(µ)y)'), 'invalid named capture: `(?P<µ>`')
-    assertRaises(lambda: re.compile('(?P<𝔘𝔫𝔦𝔠𝔬𝔡𝔢>x)(?P=𝔘𝔫𝔦𝔠𝔬𝔡𝔢)(?(𝔘𝔫𝔦𝔠𝔬𝔡𝔢)y)'), 'invalid named capture: `(?P<𝔘𝔫𝔦𝔠𝔬𝔡𝔢>`')
+    re.compile('(?P<µ>x)(?P=µ)(?(µ)y)')
+    re.compile('(?P<𝔘𝔫𝔦𝔠𝔬𝔡𝔢>x)(?P=𝔘𝔫𝔦𝔠𝔬𝔡𝔢)(?(𝔘𝔫𝔦𝔠𝔬𝔡𝔢)y)')
     # Support > 100 groups.
     pat = '|'.join(['x(?P<a%d>%x)y' % (i, i) for i in range(1, 200 + 1)])
     pat = '(?:%s)(?(200)z|t)' % pat
-    assertRaises(lambda: (re.match(pat, 'xc8yz').span(), (0, 5)), 'invalid or unsupported Perl syntax: `(?(`')
+    assertEqual(re.match(pat, 'xc8yz').span(), (0, 5))
 
 def test_symbolic_groups_errors():
     checkPatternError(r'(?P<a>)(?P<a>)',
-                            "redefinition of group name 'a' as group 2; " +
-                            "was group 1")
-
-    err = 'invalid or unsupported Perl syntax: `(?P`'
-    checkPatternError(r'(?P<a>(?P=a))', err, 10)
-    checkPatternError(r'(?Pxy)', err)
-    checkPatternError(r'(?P<a>)(?P=a', err, 11)
-    checkPatternError(r'(?P=', err, 4)
-    checkPatternError(r'(?P=)', err, 4)
-    checkPatternError(r'(?P=1)', err, 4)
-    checkPatternError(r'(?P=a)', err)
-    checkPatternError(r'(?P=a1)', err)
-    checkPatternError(r'(?P=a.)', err, 4)
-    checkPatternError(r'(?P<)', 'invalid named capture: `(?P<)`', 4)
-    checkPatternError(r'(?P<a', 'invalid named capture: `(?P<a`', 4)
-    checkPatternError(r'(?P<', err, 4)
-    checkPatternError(r'(?P<>)', 'invalid named capture: `(?P<>`', 4)
-    checkPatternError(r'(?P<1>)', "bad character in group name '1'", 4)
-    checkPatternError(r'(?P<a.>)', "invalid named capture: `(?P<a.>`", 4)
-    err = 'invalid or unsupported Perl syntax: `(?(`'
-    checkPatternError(r'(?(', err, 3)
-    checkPatternError(r'(?())', err, 3)
-    checkPatternError(r'(?(a))', err, 3)
-    checkPatternError(r'(?(-1))', err, 3)
-    checkPatternError(r'(?(1a))', err, 3)
-    checkPatternError(r'(?(a.))', err, 3)
-    checkPatternError('(?P<©>x)', 'invalid named capture: `(?P<©>`', 4)
-    checkPatternError('(?P=©)', 'invalid or unsupported Perl syntax: `(?P`', 4)
-    checkPatternError('(?(©)y)', err, 3)
+                      "redefinition of group name 'a' as group 2; " +
+                      "was group 1")
+    checkPatternError(r'(?P<a>(?P=a))',
+                      "cannot refer to an open group")
+    checkPatternError(r'(?Pxy)', 'unknown extension ?Px')
+    checkPatternError(r'(?P<a>)(?P=a', 'missing ), unterminated name')
+    checkPatternError(r'(?P=', 'missing group name')
+    checkPatternError(r'(?P=)', 'missing group name')
+    checkPatternError(r'(?P=1)', "bad character in group name '1'")
+    checkPatternError(r'(?P=a)', "unknown group name 'a'")
+    checkPatternError(r'(?P=a1)', "unknown group name 'a1'")
+    checkPatternError(r'(?P=a.)', "bad character in group name 'a.'")
+    checkPatternError(r'(?P<)', 'missing >, unterminated name')
+    checkPatternError(r'(?P<a', 'missing >, unterminated name')
+    checkPatternError(r'(?P<', 'missing group name')
+    checkPatternError(r'(?P<>)', 'missing group name')
+    checkPatternError(r'(?P<1>)', "bad character in group name '1'")
+    checkPatternError(r'(?P<a.>)', "bad character in group name 'a.'")
+    checkPatternError(r'(?(', 'missing group name')
+    checkPatternError(r'(?())', 'missing group name')
+    checkPatternError(r'(?(a))', "unknown group name 'a'")
+    checkPatternError(r'(?(-1))', "bad character in group name '-1'")
+    checkPatternError(r'(?(1a))', "bad character in group name '1a'")
+    checkPatternError(r'(?(a.))', "bad character in group name 'a.'")
+    checkPatternError('(?P<©>x)', "bad character in group name '©'")
+    checkPatternError('(?P=©)', "bad character in group name '©'")
+    checkPatternError('(?(©)y)', "bad character in group name '©'")
     checkPatternError(b'(?P<\xc2\xb5>x)',
-                      'invalid named capture: `(?P<µ>`', 4)
+                      r"bad character in group name '\xc2\xb5'")
     checkPatternError(b'(?P=\xc2\xb5)',
-                      'invalid or unsupported Perl syntax: `(?P`', 4)
-    checkPatternError(b'(?(\xc2\xb5)y)', err, 3)
+                      r"bad character in group name '\xc2\xb5'")
+    checkPatternError(b'(?(\xc2\xb5)y)',
+                      r"bad character in group name '\xc2\xb5'")
 
 def test_symbolic_refs():
     assertEqual(re.sub('(?P<a>x)|(?P<b>y)', r'\g<b>', 'xx'), '')
     assertEqual(re.sub('(?P<a>x)|(?P<b>y)', r'\2', 'xx'), '')
     assertEqual(re.sub(b'(?P<a1>x)', b'\\g<a1>', b'xx'), b'xx')
-    # New valid identifiers in Python 3 (but do not work in Go)
-    assertRaises(lambda: re.sub('(?P<µ>x)', r'\g<µ>', 'xx'), 'invalid named capture: `(?P<µ>`')
-    assertRaises(lambda: re.sub('(?P<𝔘𝔫𝔦𝔠𝔬𝔡𝔢>x)', r'\g<𝔘𝔫𝔦𝔠𝔬𝔡𝔢>', 'xx'), 'invalid named capture: `(?P<𝔘𝔫𝔦𝔠𝔬𝔡𝔢>`')
+    # New valid identifiers in Python 3
+    assertEqual(re.sub('(?P<µ>x)', r'\g<µ>', 'xx'), 'xx')
+    assertEqual(re.sub('(?P<𝔘𝔫𝔦𝔠𝔬𝔡𝔢>x)', r'\g<𝔘𝔫𝔦𝔠𝔬𝔡𝔢>', 'xx'), 'xx')
     # Support > 100 groups.
     pat = '|'.join(['x(?P<a%d>%x)y' % (i, i) for i in range(1, 200 + 1)])
     assertEqual(re.sub(pat, r'\g<200>', 'xc8yzxc8y'), 'c8zc8')
 
 def test_symbolic_refs_errors():
     checkTemplateError('(?P<a>x)', r'\g<a', 'xx',
-                            'missing >, unterminated name', 3)
+                            'missing >, unterminated name')
     checkTemplateError('(?P<a>x)', r'\g<', 'xx',
-                            'missing group name', 3)
-    checkTemplateError('(?P<a>x)', r'\g', 'xx', 'missing <', 2)
+                            'missing group name')
+    checkTemplateError('(?P<a>x)', r'\g', 'xx', 'missing <')
     checkTemplateError('(?P<a>x)', r'\g<a a>', 'xx',
-                            "bad character in group name 'a a'", 3)
+                            "bad character in group name 'a a'")
     checkTemplateError('(?P<a>x)', r'\g<>', 'xx',
-                            'missing group name', 3)
+                            'missing group name')
     checkTemplateError('(?P<a>x)', r'\g<1a1>', 'xx',
-                            "bad character in group name '1a1'", 3)
+                            "bad character in group name '1a1'")
     checkTemplateError('(?P<a>x)', r'\g<2>', 'xx',
-                            'invalid group reference 2', 3)
+                            'invalid group reference 2')
     checkTemplateError('(?P<a>x)', r'\2', 'xx',
-                            'invalid group reference 2', 1)
+                            'invalid group reference 2')
     assertRaisesRegex(lambda: re.sub('(?P<a>x)', r'\g<ab>', 'xx'),
                       "unknown group name 'ab'")
     checkTemplateError('(?P<a>x)', r'\g<-1>', 'xx',
-                            "bad character in group name '-1'", 3)
+                            "bad character in group name '-1'")
     checkTemplateError('(?P<a>x)', r'\g<+1>', 'xx',
-                            "bad character in group name '+1'", 3)
+                            "bad character in group name '+1'")
     checkTemplateError('()'*10, r'\g<1_0>', 'xx',
-                            "bad character in group name '1_0'", 3)
+                            "bad character in group name '1_0'")
     checkTemplateError('(?P<a>x)', r'\g< 1 >', 'xx',
-                            "bad character in group name ' 1 '", 3)
+                            "bad character in group name ' 1 '")
     checkTemplateError('(?P<a>x)', r'\g<©>', 'xx',
-                            "bad character in group name '©'", 3)
+                            "bad character in group name '©'")
     checkTemplateError(b'(?P<a>x)', b'\\g<\xc2\xb5>', b'xx',
-                            r"bad character in group name '\xc2\xb5'", 3)
+                            r"bad character in group name '\xc2\xb5'")
     checkTemplateError('(?P<a>x)', r'\g<㊀>', 'xx',
-                            "bad character in group name '㊀'", 3)
+                            "bad character in group name '㊀'")
     checkTemplateError('(?P<a>x)', r'\g<¹>', 'xx',
-                            "bad character in group name '¹'", 3)
+                            "bad character in group name '¹'")
     checkTemplateError('(?P<a>x)', r'\g<१>', 'xx',
-                            "bad character in group name '१'", 3)
+                            "bad character in group name '१'")
 
 def test_re_subn():
     assertEqual(re.subn("(?i)b+", "x", "bbbb BBBB"), ('x x', 2))
@@ -910,20 +931,22 @@ def test_re_subn():
                       r'subn: got 6 arguments, want at most 5')
 
 def test_re_split():
-    for string in ":a:b::c", S(":a:b::c"):
-        assertTypedEqual(re.split(":", string),
-                                ['', 'a', 'b', '', 'c'])
-        assertTypedEqual(re.split(":+", string),
-                                ['', 'a', 'b', 'c'])
-        assertTypedEqual(re.split("(:+)", string),
-                                ['', ':', 'a', ':', 'b', '::', 'c'])
-    for string in (b":a:b::c", B(b":a:b::c")):
-        assertTypedEqual(re.split(b":", string),
-                                [b'', b'a', b'b', b'', b'c'])
-        assertTypedEqual(re.split(b":+", string),
-                                [b'', b'a', b'b', b'c'])
-        assertTypedEqual(re.split(b"(:+)", string),
-                                [b'', b':', b'a', b':', b'b', b'::', b'c'])
+    string = ":a:b::c"
+    assertTypedEqual(re.split(":", string),
+                            ['', 'a', 'b', '', 'c'])
+    assertTypedEqual(re.split(":+", string),
+                            ['', 'a', 'b', 'c'])
+    assertTypedEqual(re.split("(:+)", string),
+                            ['', ':', 'a', ':', 'b', '::', 'c'])
+
+    string = b":a:b::c"
+    assertTypedEqual(re.split(b":", string),
+                            [b'', b'a', b'b', b'', b'c'])
+    assertTypedEqual(re.split(b":+", string),
+                            [b'', b'a', b'b', b'c'])
+    assertTypedEqual(re.split(b"(:+)", string),
+                            [b'', b':', b'a', b':', b'b', b'::', b'c'])
+
     for v in ("\u00E0\u00DF\u00E7", "\u0430\u0431\u0432",
                     "\U0001d49c\U0001d49e\U0001d4b5"):
         a, b, c = v.codepoints() # starlark fix
@@ -955,8 +978,8 @@ def test_re_split():
     for sep, expected in [
         ('', ['', ':', 'a', ':', 'b', ':', ':', 'c', '']),
         (r'\b', [':', 'a', ':', 'b', '::', 'c', '']),
-        # (r'(?=:)', ['', ':a', ':b', ':', ':c']),
-        # (r'(?<=:)', [':', 'a:', 'b:', ':', 'c']),
+        (r'(?=:)', ['', ':a', ':b', ':', ':c']),
+        (r'(?<=:)', [':', 'a:', 'b:', ':', 'c']),
     ]:
         assertTypedEqual(re.split(sep, ':a:b::c'), expected)
 
@@ -980,21 +1003,20 @@ def test_qualified_re_split():
 
 def test_re_findall():
     assertEqual(re.findall(":+", "abc"), [])
-    for string in "a:b::c:::d", S("a:b::c:::d"):
-        assertTypedEqual(re.findall(":+", string),
-                                [":", "::", ":::"])
-        assertTypedEqual(re.findall("(:+)", string),
-                                [":", "::", ":::"])
-        assertTypedEqual(re.findall("(:)(:*)", string),
-                                [(":", ""), (":", ":"), (":", "::")])
-    for string in (b"a:b::c:::d", B(b"a:b::c:::d"), bytearray(b"a:b::c:::d"),
-                    memoryview(b"a:b::c:::d")):
-        assertTypedEqual(re.findall(b":+", string),
-                                [b":", b"::", b":::"])
-        assertTypedEqual(re.findall(b"(:+)", string),
-                                [b":", b"::", b":::"])
-        assertTypedEqual(re.findall(b"(:)(:*)", string),
-                                [(b":", b""), (b":", b":"), (b":", b"::")])
+    string = "a:b::c:::d"
+    assertTypedEqual(re.findall(":+", string),
+                            [":", "::", ":::"])
+    assertTypedEqual(re.findall("(:+)", string),
+                            [":", "::", ":::"])
+    assertTypedEqual(re.findall("(:)(:*)", string),
+                            [(":", ""), (":", ":"), (":", "::")])
+    string = b"a:b::c:::d"
+    assertTypedEqual(re.findall(b":+", string),
+                            [b":", b"::", b":::"])
+    assertTypedEqual(re.findall(b"(:+)", string),
+                            [b":", b"::", b":::"])
+    assertTypedEqual(re.findall(b"(:)(:*)", string),
+                            [(b":", b""), (b":", b":"), (b":", b"::")])
     for x in ("\u00E0", "\u0430", "\U0001d49c"):
         xx = x * 2
         xxx = x * 3
@@ -1009,18 +1031,20 @@ def test_bug_117612():
                         [("a", ""),("b", "b"),("a", "")])
 
 def test_re_match():
-    for string in ('a', S('a')):
-        assertEqual(re.match('a', string).groups(), ())
-        assertEqual(re.match('(a)', string).groups(), ('a',))
-        assertEqual(re.match('(a)', string).group(0), 'a')
-        assertEqual(re.match('(a)', string).group(1), 'a')
-        assertEqual(re.match('(a)', string).group(1, 1), ('a', 'a'))
-    for string in (b'a', B(b'a'), bytearray(b'a'), memoryview(b'a')):
-        assertEqual(re.match(b'a', string).groups(), ())
-        assertEqual(re.match(b'(a)', string).groups(), (b'a',))
-        assertEqual(re.match(b'(a)', string).group(0), b'a')
-        assertEqual(re.match(b'(a)', string).group(1), b'a')
-        assertEqual(re.match(b'(a)', string).group(1, 1), (b'a', b'a'))
+    string = 'a'
+    assertEqual(re.match('a', string).groups(), ())
+    assertEqual(re.match('(a)', string).groups(), ('a',))
+    assertEqual(re.match('(a)', string).group(0), 'a')
+    assertEqual(re.match('(a)', string).group(1), 'a')
+    assertEqual(re.match('(a)', string).group(1, 1), ('a', 'a'))
+
+    string = b'a'
+    assertEqual(re.match(b'a', string).groups(), ())
+    assertEqual(re.match(b'(a)', string).groups(), (b'a',))
+    assertEqual(re.match(b'(a)', string).group(0), b'a')
+    assertEqual(re.match(b'(a)', string).group(1), b'a')
+    assertEqual(re.match(b'(a)', string).group(1, 1), (b'a', b'a'))
+
     for a in ("\u00E0", "\u0430", "\U0001d49c"):
         assertEqual(re.match(a, a).groups(), ())
         assertEqual(re.match('(%s)' % a, a).groups(), (a,))
@@ -1042,22 +1066,17 @@ def test_re_match():
     assertEqual(pat.match('ac').group(1, 'b2', 3), ('a', None, 'c'))
 
 def test_group():
-    def Index(i):
-        return i
     # A single group
     m = re.match('(a)(b)', 'ab')
     assertEqual(m.group(), 'ab')
     assertEqual(m.group(0), 'ab')
     assertEqual(m.group(1), 'a')
-    assertEqual(m.group(Index(1)), 'a')
     assertRaises(lambda: m.group(-1))
     assertRaises(lambda: m.group(3))
     assertRaises(lambda: m.group(1<<1000))
-    assertRaises(lambda: m.group(Index(1<<1000)))
     assertRaises(lambda: m.group('x'))
     # Multiple groups
     assertEqual(m.group(2, 1), ('b', 'a'))
-    assertEqual(m.group(Index(2), Index(1)), ('b', 'a'))
 
 def test_match_getitem():
     pat = re.compile('(?:(?P<a1>a)|(?P<b2>b))(?P<c3>c)?')
@@ -1066,7 +1085,7 @@ def test_match_getitem():
     assertEqual(m['a1'], 'a')
     assertEqual(m['b2'], None)
     assertEqual(m['c3'], None)
-    # assertEqual('a1={a1} b2={b2} c3={c3}'.format_map(m), 'a1=a b2=None c3=None')
+    assertEqual('a1={a1} b2={b2} c3={c3}'.format(**m.groupdict()), 'a1=a b2=None c3=None')
     assertEqual(m[0], 'a')
     assertEqual(m[1], 'a')
     assertEqual(m[2], None)
@@ -1076,22 +1095,21 @@ def test_match_getitem():
     assertRaisesRegex(lambda: m[4], 'no such group')
     assertRaisesRegex(lambda: m[0, 1], 'no such group')
     assertRaisesRegex(lambda: m[(0,)], 'no such group')
-    assertRaisesRegex(lambda: m[m[(0, 1)]], 'no such group')
-    # assertRaisesRegex(lambda: 'a1={a2}'.format_map(m), 'no such group')
+    assertRaisesRegex(lambda: m[(0, 1)], 'no such group')
+    assertRaisesRegex(lambda: 'a1={a2}'.format(m), 'format: keyword a2 not found')
 
     m = pat.match('ac')
     assertEqual(m['a1'], 'a')
     assertEqual(m['b2'], None)
     assertEqual(m['c3'], 'c')
-    # assertEqual('a1={a1} b2={b2} c3={c3}'.format_map(m), 'a1=a b2=None c3=c')
+    assertEqual('a1={a1} b2={b2} c3={c3}'.format(**m.groupdict()), 'a1=a b2=None c3=c')
     assertEqual(m[0], 'ac')
     assertEqual(m[1], 'a')
     assertEqual(m[2], None)
     assertEqual(m[3], 'c')
 
     # Cannot assign.
-    def cb():
-        m[0] = 1
+    def cb(): m[0] = 1
     assertRaises(cb)
 
     # No len().
@@ -1100,10 +1118,8 @@ def test_match_getitem():
 def test_re_fullmatch():
     # Issue 16203: Proposal: add re.fullmatch() method.
     assertEqual(re.fullmatch(r"a", "a").span(), (0, 1))
-    for string in ("ab", S("ab")):
-        assertEqual(re.fullmatch(r"a|ab", string).span(), (0, 2))
-    for string in (b"ab", B(b"ab")):
-        assertEqual(re.fullmatch(b"a|ab", string).span(), (0, 2))
+    assertEqual(re.fullmatch(r"a|ab", "ab").span(), (0, 2))
+    assertEqual(re.fullmatch(b"a|ab", b"ab").span(), (0, 2))
     for v, l in zip(("\u00E0\u00DF", "\u0430\u0431", "\U0001d49c\U0001d49e"), (4, 4, 8)):
         a, b = v.codepoints() # starlark fix
         r = r"%s|%s" % (a, a + b)
@@ -1115,13 +1131,11 @@ def test_re_fullmatch():
     assertEqual(re.fullmatch(r"a.*?b", "axxb").span(), (0, 4))
     assertIsNone(re.fullmatch(r"a+", "ab"))
     assertIsNone(re.fullmatch(r"abc$", "abc\n"))
-    assertRaises(lambda: re.fullmatch(r"abc\Z", "abc\n"), 'invalid escape sequence: `\\Z`')
+    assertIsNone(re.fullmatch(r"abc\Z", "abc\n"))
     assertIsNone(re.fullmatch(r"(?m)abc$", "abc\n"))
-    err = 'invalid or unsupported Perl syntax: `(?=`'
-    assertRaises(lambda: re.fullmatch(r"ab(?=c)cd", "abcd").span(), err)
-    assertRaises(lambda: re.fullmatch(r"(?=a|ab)ab", "ab").span(), err)
-    err = 'invalid or unsupported Perl syntax: `(?<`'
-    assertRaises(lambda: re.fullmatch(r"ab(?<=b)cd", "abcd").span(), err)
+    assertEqual(re.fullmatch(r"ab(?=c)cd", "abcd").span(), (0, 4))
+    assertEqual(re.fullmatch(r"ab(?<=b)cd", "abcd").span(), (0, 4))
+    assertEqual(re.fullmatch(r"(?=a|ab)ab", "ab").span(), (0, 2))
 
     assertEqual(
         re.compile(r"bc").fullmatch("abcd", pos=1, endpos=3).span(), (1, 3))
@@ -1129,6 +1143,92 @@ def test_re_fullmatch():
         re.compile(r".*?$").fullmatch("abcd", pos=1, endpos=3).span(), (1, 3))
     assertEqual(
         re.compile(r".*?").fullmatch("abcd", pos=1, endpos=3).span(), (1, 3))
+
+def test_re_groupref_exists():
+    assertEqual(re.match(r'^(\()?([^()]+)(?(1)\))$', '(a)').groups(),
+                        ('(', 'a'))
+    assertEqual(re.match(r'^(\()?([^()]+)(?(1)\))$', 'a').groups(),
+                        (None, 'a'))
+    assertIsNone(re.match(r'^(\()?([^()]+)(?(1)\))$', 'a)'))
+    assertIsNone(re.match(r'^(\()?([^()]+)(?(1)\))$', '(a'))
+    assertEqual(re.match('^(?:(a)|c)((?(1)b|d))$', 'ab').groups(),
+                        ('a', 'b'))
+    assertEqual(re.match(r'^(?:(a)|c)((?(1)b|d))$', 'cd').groups(),
+                        (None, 'd'))
+    assertEqual(re.match(r'^(?:(a)|c)((?(1)|d))$', 'cd').groups(),
+                        (None, 'd'))
+    assertEqual(re.match(r'^(?:(a)|c)((?(1)|d))$', 'a').groups(),
+                        ('a', ''))
+
+    # Tests for bug #1177831: exercise groups other than the first group
+    p = re.compile('(?P<g1>a)(?P<g2>b)?((?(g2)c|d))')
+    assertEqual(p.match('abc').groups(),
+                        ('a', 'b', 'c'))
+    assertEqual(p.match('ad').groups(),
+                        ('a', None, 'd'))
+    assertIsNone(p.match('abd'))
+    assertIsNone(p.match('ac'))
+
+    # Support > 100 groups.
+    pat = '|'.join(['x(?P<a%d>%x)y' % (i, i) for i in range(1, 200 + 1)])
+    pat = '(?:%s)(?(200)z)' % pat
+    assertEqual(re.match(pat, 'xc8yz').span(), (0, 5))
+
+def test_re_groupref_exists_errors():
+    checkPatternError(r'(?P<a>)(?(0)a|b)', 'bad group number')
+    checkPatternError(r'()(?(-1)a|b)',
+                      "bad character in group name '-1'")
+    checkPatternError(r'()(?(+1)a|b)',
+                      "bad character in group name '+1'")
+    checkPatternError(r'()'*10 + r'(?(1_0)a|b)',
+                      "bad character in group name '1_0'")
+    checkPatternError(r'()(?( 1 )a|b)',
+                      "bad character in group name ' 1 '")
+    checkPatternError(r'()(?(㊀)a|b)',
+                      "bad character in group name '㊀'")
+    checkPatternError(r'()(?(¹)a|b)',
+                      "bad character in group name '¹'")
+    checkPatternError(r'()(?(१)a|b)',
+                      "bad character in group name '१'")
+    checkPatternError(r'()(?(1',
+                      "missing ), unterminated name")
+    checkPatternError(r'()(?(1)a',
+                      "missing ), unterminated subpattern")
+    checkPatternError(r'()(?(1)a|b',
+                      'missing ), unterminated subpattern')
+    checkPatternError(r'()(?(1)a|b|c',
+                      'conditional backref with more than ' +
+                      'two branches')
+    checkPatternError(r'()(?(1)a|b|c)',
+                      'conditional backref with more than ' +
+                      'two branches')
+    checkPatternError(r'()(?(2)a)',
+                      "invalid group reference 2")
+
+def test_re_groupref_exists_validation_bug():
+    for i in range(256):
+        re.compile(format(r'()(?(1)\x%02x?)', i))
+
+def test_re_groupref_overflow():
+    MAXGROUPS = 1000
+    checkTemplateError('()', r'\g<%s>' % MAXGROUPS, 'xx',
+                       'invalid group reference %d' % MAXGROUPS)
+    checkPatternError(r'(?P<a>)(?(%d))' % MAXGROUPS,
+                      'invalid group reference %d' % MAXGROUPS)
+
+def test_re_groupref():
+    assertEqual(re.match(r'^(\|)?([^()]+)\1$', '|a|').groups(),
+                        ('|', 'a'))
+    assertEqual(re.match(r'^(\|)?([^()]+)\1?$', 'a').groups(),
+                        (None, 'a'))
+    assertIsNone(re.match(r'^(\|)?([^()]+)\1$', 'a|'))
+    assertIsNone(re.match(r'^(\|)?([^()]+)\1$', '|a'))
+    assertEqual(re.match(r'^(?:(a)|c)(\1)$', 'aa').groups(),
+                        ('a', 'a'))
+    assertEqual(re.match(r'^(?:(a)|c)(\1)?$', 'c').groups(),
+                        (None, None))
+
+    checkPatternError(r'(abc\1)', 'cannot refer to an open group')
 
 def test_groupdict():
     assertEqual(re.match('(?P<first>first) (?P<second>second)',
@@ -1179,7 +1279,7 @@ def test_repeat_minmax():
     assertTrue(re.match(r"^x{}$", "x{}"))
 
     checkPatternError(r'x{2,1}',
-                      'invalid repeat count: `{2,1}`', 2)
+                      'min repeat greater than max repeat')
 
 def test_getattr():
     assertEqual(re.compile("(?i)(a)(b)").pattern, "(?i)(a)(b)")
@@ -1199,11 +1299,8 @@ def test_getattr():
     p = re.compile(r'(?i)(?P<first>a)(?P<other>b)')
     assertEqual(sorted(p.groupindex), ['first', 'other'])
     assertEqual(p.groupindex['other'], 2)
-
-    def cb():
-        p.groupindex['other'] = 0
+    def cb(): p.groupindex['other'] = 0
     assertRaises(cb)
-
     assertEqual(p.groupindex['other'], 2)
 
 def test_special_escapes():
@@ -1216,9 +1313,8 @@ def test_special_escapes():
     assertEqual(re.search(r"\B(b.)\B",
                                 "abc bcd bc abxd", re.ASCII).group(1), "bx")
     assertEqual(re.search(r"^abc$", "\nabc\n", re.M).group(0), "abc")
-    err = r'invalid escape sequence: `\Z`'
-    assertRaises(lambda: re.search(r"^\Aabc\Z$", "abc", re.M).group(0), err)
-    assertRaises(lambda: re.search(r"^\Aabc\Z$", "\nabc\n", re.M), err)
+    assertEqual(re.search(r"^\Aabc\Z$", "abc", re.M).group(0), "abc")
+    assertIsNone(re.search(r"^\Aabc\Z$", "\nabc\n", re.M))
     assertEqual(re.search(b"\\b(b.)\\b",
                                 b"abcd abc bcd bx").group(1), b"bx")
     assertEqual(re.search(b"\\B(b.)\\B",
@@ -1228,8 +1324,8 @@ def test_special_escapes():
     assertEqual(re.search(b"\\B(b.)\\B",
                                 b"abc bcd bc abxd", re.LOCALE).group(1), b"bx")
     assertEqual(re.search(b"^abc$", b"\nabc\n", re.M).group(0), b"abc")
-    assertRaises(lambda: re.search(b"^\\Aabc\\Z$", b"abc", re.M).group(0), err)
-    assertRaises(lambda: re.search(b"^\\Aabc\\Z$", b"\nabc\n", re.M), err)
+    assertEqual(re.search(b"^\\Aabc\\Z$", b"abc", re.M).group(0), b"abc")
+    assertIsNone(re.search(b"^\\Aabc\\Z$", b"\nabc\n", re.M))
     assertEqual(re.search(r"\d\D\w\W\s\S",
                                 "1aa! a").group(0), "1aa! a")
     assertEqual(re.search(b"\\d\\D\\w\\W\\s\\S",
@@ -1240,7 +1336,7 @@ def test_special_escapes():
                                 b"1aa! a", re.LOCALE).group(0), b"1aa! a")
 
 def test_other_escapes():
-    checkPatternError("\\", r'trailing backslash at end of expression: ``', 0)
+    checkPatternError("\\", 'bad escape (end of pattern)')
     assertEqual(re.match(r"\(", '(').group(), '(')
     assertIsNone(re.match(r"\(", ')'))
     assertEqual(re.match(r"\\", '\\').group(), '\\')
@@ -1251,7 +1347,7 @@ def test_other_escapes():
     assertEqual(re.match(r"[\^a]+", 'a^').group(), 'a^')
     assertIsNone(re.match(r"[\^a]+", 'b'))
     re.purge()  # for warnings
-    for c in 'ceghijklmopquxyCEFGHIJKLMNOPRTUVXYZ'.elems():
+    for c in 'ceghijklmopqyzCEFGHIJKLMNOPQRTVXY'.elems():
         assertRaises(lambda: re.compile('\\%c' % c))
     for c in 'ceghijklmopqyzABCEFGHIJKLMNOPQRTVXYZ'.elems():
         assertRaises(lambda: re.compile('[\\%c]' % c))
@@ -1271,30 +1367,30 @@ def test_named_unicode_escapes():
                                 ';'))
 
     # test errors in \N{name} handling - only valid names should pass
-    checkPatternError(r'\N', 'missing {', 2)
-    checkPatternError(r'[\N]', 'missing {', 3)
-    checkPatternError(r'\N{', 'missing character name', 3)
-    checkPatternError(r'[\N{', 'missing character name', 4)
-    checkPatternError(r'\N{}', 'missing character name', 3)
-    checkPatternError(r'[\N{}]', 'missing character name', 4)
-    checkPatternError(r'\NSNAKE}', 'missing {', 2)
-    checkPatternError(r'[\NSNAKE}]', 'missing {', 3)
+    checkPatternError(r'\N', 'missing {')
+    checkPatternError(r'[\N]', 'missing {')
+    checkPatternError(r'\N{', 'missing character name')
+    checkPatternError(r'[\N{', 'missing character name')
+    checkPatternError(r'\N{}', 'missing character name')
+    checkPatternError(r'[\N{}]', 'missing character name')
+    checkPatternError(r'\NSNAKE}', 'missing {')
+    checkPatternError(r'[\NSNAKE}]', 'missing {')
     checkPatternError(r'\N{SNAKE',
-                            'missing }, unterminated name', 3)
+                            'missing }, unterminated name')
     checkPatternError(r'[\N{SNAKE]',
-                            'missing }, unterminated name', 4)
+                            'missing }, unterminated name')
     checkPatternError(r'[\N{SNAKE]}',
-                            "undefined character name 'SNAKE]'", 1)
+                            "undefined character name 'SNAKE]'")
     checkPatternError(r'\N{SPAM}',
-                            "undefined character name 'SPAM'", 0)
+                            "undefined character name 'SPAM'")
     checkPatternError(r'[\N{SPAM}]',
-                            "undefined character name 'SPAM'", 1)
+                            "undefined character name 'SPAM'")
     checkPatternError(r'\N{KEYCAP NUMBER SIGN}',
-                        "undefined character name 'KEYCAP NUMBER SIGN'", 0)
+                        "undefined character name 'KEYCAP NUMBER SIGN'")
     checkPatternError(r'[\N{KEYCAP NUMBER SIGN}]',
-                        "undefined character name 'KEYCAP NUMBER SIGN'", 1)
-    checkPatternError(b'\\N{LESS-THAN SIGN}', r'bad escape \N', 0)
-    checkPatternError(b'[\\N{LESS-THAN SIGN}]', r'bad escape \N', 1)
+                        "undefined character name 'KEYCAP NUMBER SIGN'")
+    checkPatternError(b'\\N{LESS-THAN SIGN}', r'bad escape \N')
+    checkPatternError(b'[\\N{LESS-THAN SIGN}]', r'bad escape \N')
 
 def test_string_boundaries():
     # See http://bugs.python.org/issue10713
@@ -1308,7 +1404,7 @@ def test_string_boundaries():
     assertFalse(re.match(r"\B", "abc"))
     # However, an empty string contains no word boundaries, and also no
     # non-boundaries.
-    # SKIP: assertIsNone(re.search(r"\B", ""))
+    # SKIP, is not fixable: assertIsNone(re.search(r"\B", ""))
     # This one is questionable and different from the perlre behaviour,
     # but describes current behavior.
     assertIsNone(re.search(r"\b", ""))
@@ -1325,7 +1421,7 @@ def test_string_boundaries():
 def test_bigcharset():
     assertEqual(re.match("([\u2222\u2223])",
                                 "\u2222").group(1), "\u2222")
-    r = '[%s]' % ''.join([chr(c) for c in range(256, pow(2,16), 255)])
+    r = '[%s]' % ''.join([chr(c) for c in range(256, 1<<16, 255)])
     assertEqual(re.match(r, "\uff01").group(), "\uff01")
 
 def test_big_codesize():
@@ -1340,6 +1436,60 @@ def test_anyall():
     assertEqual(re.match("a.*b", "a\n\nb", re.DOTALL).group(0),
                         "a\n\nb")
 
+def test_lookahead():
+    assertEqual(re.match(r"(a(?=\s[^a]))", "a b").group(1), "a")
+    assertEqual(re.match(r"(a(?=\s[^a]*))", "a b").group(1), "a")
+    assertEqual(re.match(r"(a(?=\s[abc]))", "a b").group(1), "a")
+    assertEqual(re.match(r"(a(?=\s[abc]*))", "a bc").group(1), "a")
+    assertEqual(re.match(r"(a)(?=\s\1)", "a a").group(1), "a")
+    assertEqual(re.match(r"(a)(?=\s\1*)", "a aa").group(1), "a")
+    assertEqual(re.match(r"(a)(?=\s(abc|a))", "a a").group(1), "a")
+
+    assertEqual(re.match(r"(a(?!\s[^a]))", "a a").group(1), "a")
+    assertEqual(re.match(r"(a(?!\s[abc]))", "a d").group(1), "a")
+    assertEqual(re.match(r"(a)(?!\s\1)", "a b").group(1), "a")
+    assertEqual(re.match(r"(a)(?!\s(abc|a))", "a b").group(1), "a")
+
+    # Group reference.
+    assertTrue(re.match(r'(a)b(?=\1)a', 'aba'))
+    assertIsNone(re.match(r'(a)b(?=\1)c', 'abac'))
+    # Conditional group reference.
+    assertTrue(re.match(r'(?:(a)|(x))b(?=(?(2)x|c))c', 'abc'))
+    assertIsNone(re.match(r'(?:(a)|(x))b(?=(?(2)c|x))c', 'abc'))
+    assertTrue(re.match(r'(?:(a)|(x))b(?=(?(2)x|c))c', 'abc'))
+    assertIsNone(re.match(r'(?:(a)|(x))b(?=(?(1)b|x))c', 'abc'))
+    assertTrue(re.match(r'(?:(a)|(x))b(?=(?(1)c|x))c', 'abc'))
+    # Group used before defined.
+    assertTrue(re.match(r'(a)b(?=(?(2)x|c))(c)', 'abc'))
+    assertIsNone(re.match(r'(a)b(?=(?(2)b|x))(c)', 'abc'))
+    assertTrue(re.match(r'(a)b(?=(?(1)c|x))(c)', 'abc'))
+
+def test_lookbehind():
+    assertTrue(re.match(r'ab(?<=b)c', 'abc'))
+    assertIsNone(re.match(r'ab(?<=c)c', 'abc'))
+    assertIsNone(re.match(r'ab(?<!b)c', 'abc'))
+    assertTrue(re.match(r'ab(?<!c)c', 'abc'))
+    # Group reference.
+    assertTrue(re.match(r'(a)a(?<=\1)c', 'aac'))
+    assertIsNone(re.match(r'(a)b(?<=\1)a', 'abaa'))
+    assertIsNone(re.match(r'(a)a(?<!\1)c', 'aac'))
+    assertTrue(re.match(r'(a)b(?<!\1)a', 'abaa'))
+    # Conditional group reference.
+    assertIsNone(re.match(r'(?:(a)|(x))b(?<=(?(2)x|c))c', 'abc'))
+    assertIsNone(re.match(r'(?:(a)|(x))b(?<=(?(2)b|x))c', 'abc'))
+    assertTrue(re.match(r'(?:(a)|(x))b(?<=(?(2)x|b))c', 'abc'))
+    assertIsNone(re.match(r'(?:(a)|(x))b(?<=(?(1)c|x))c', 'abc'))
+    assertTrue(re.match(r'(?:(a)|(x))b(?<=(?(1)b|x))c', 'abc'))
+    # Group used before defined.
+    assertRaises(lambda: re.compile(r'(a)b(?<=(?(2)b|x))(c)'))
+    assertIsNone(re.match(r'(a)b(?<=(?(1)c|x))(c)', 'abc'))
+    assertTrue(re.match(r'(a)b(?<=(?(1)b|x))(c)', 'abc'))
+    # Group defined in the same lookbehind pattern
+    assertRaises(lambda: re.compile(r'(a)b(?<=(.)\2)(c)'))
+    assertRaises(lambda: re.compile(r'(a)b(?<=(?P<a>.)(?P=a))(c)'))
+    assertRaises(lambda: re.compile(r'(a)b(?<=(a)(?(2)b|x))(c)'))
+    assertRaises(lambda: re.compile(r'(a)b(?<=(.)(?<=\2))(c)'))
+
 def test_ignore_case():
     assertEqual(re.match("abc", "ABC", re.I).group(0), "ABC")
     assertEqual(re.match(b"abc", b"ABC", re.I).group(0), b"ABC")
@@ -1347,8 +1497,8 @@ def test_ignore_case():
     assertEqual(re.match(r"(a\s[^a]*)", "a bb", re.I).group(1), "a bb")
     assertEqual(re.match(r"(a\s[abc])", "a b", re.I).group(1), "a b")
     assertEqual(re.match(r"(a\s[abc]*)", "a bb", re.I).group(1), "a bb")
-    # assertEqual(re.match(r"((a)\s\2)", "a a", re.I).group(1), "a a")
-    # assertEqual(re.match(r"((a)\s\2*)", "a aa", re.I).group(1), "a aa")
+    assertEqual(re.match(r"((a)\s\2)", "a a", re.I).group(1), "a a")
+    assertEqual(re.match(r"((a)\s\2*)", "a aa", re.I).group(1), "a aa")
     assertEqual(re.match(r"((a)\s(abc|a))", "a a", re.I).group(1), "a a")
     assertEqual(re.match(r"((a)\s(abc|a)*)", "a aa", re.I).group(1), "a aa")
 
@@ -1483,7 +1633,6 @@ def test_possible_set_operations():
     assertEqual(re.findall(r'[\d&&1]', s), list('&0123456789'.elems()))
     assertEqual(re.findall(r'[&&1]', s), list('&1'.elems()))
 
-
     assertEqual(re.findall(r'[0-9||a]', s), list('0123456789a|'.elems()))
     assertEqual(re.findall(r'[\d||a]', s), list('0123456789a|'.elems()))
     assertEqual(re.findall(r'[||1]', s), list('1|'.elems()))
@@ -1494,7 +1643,7 @@ def test_possible_set_operations():
 
     assertEqual(re.findall(r'[[0-9]|]', s), list('0123456789[]'.elems()))
 
-    # Does not work in Go: assertEqual(re.findall(r'[[:digit:]|]', s), list(':[]dgit'.elems()))
+    assertEqual(re.findall(r'[[:digit:]|]', s), list(':[]dgit'.elems()))
 
 def test_search_coverage():
     assertEqual(re.search(r"\s(b)", " b").group(1), "b")
@@ -1508,7 +1657,7 @@ def assertMatch(pattern, text, match=None, span=None,
         span = (0, len(text))
     elif match == None or span == None:
         fail('If match is not None, span should be specified ' +
-             '(and vice versa).')
+                            '(and vice versa).')
     m = matcher(pattern, text)
     assertTrue(m)
     assertEqual(m.group(), match)
@@ -1521,7 +1670,7 @@ def test_re_escape():
     for c in p.codepoints():
         assertMatch(re.escape(c), c)
         assertMatch('[' + re.escape(c) + ']', c)
-        # assertMatch('(?x)' + re.escape(c), c)
+        assertMatch('(?x)' + re.escape(c), c)
     assertMatch(re.escape(p), p)
     for c in '-.]{}'.elems():
         assertEqual(re.escape(c)[:1], '\\')
@@ -1530,6 +1679,12 @@ def test_re_escape():
 
 def test_re_escape_bytes():
     p = bytes(range(256))
+    for i in p.elems():
+        b = bytes([i])
+        assertMatch(re.escape(b), b)
+        assertMatch(bcat(b'[', re.escape(b), b']'), b)
+        assertMatch(bcat(b'(?x)', re.escape(b)), b)
+    assertMatch(re.escape(p), p)
     for i in b'-.]{}'.elems():
         b = bytes([i])
         assertEqual(re.escape(b)[:1], b'\\')
@@ -1542,7 +1697,7 @@ def test_re_escape_non_ascii():
     assertEqual(s_escaped, s)
     assertMatch(s_escaped, s)
     assertMatch('.%s+.' % re.escape('\u2620'), s,
-                        'x\u2620\u2620\u2620x', (2, 13), re.search) # absolute byte positions
+                'x\u2620\u2620\u2620x', (2, 13), re.search) # absolute byte positions
 
 def test_re_escape_non_ascii_bytes():
     b = bytes('y\u2620y\u2620y')
@@ -1565,40 +1720,6 @@ def test_flags():
     for flag in [re.I, re.M, re.X, re.S, re.A, re.L]:
         assertTrue(re.compile(b'^pattern$', flag))
 
-def format(s, *args):
-    r = re.compile(r'%(?P<flags>[-+#0])?(?P<width>\d+|\*)?(?:\.(?P<precision>\d+|\*))?(?P<length>[hljztL]|hh|ll)?(?P<specifier>[diuoxXfFeEgGaAcspn])')
-
-    def to_base(n, b):
-        res = ""
-        while n:
-            res += "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"[n % b]
-            n //= b
-        return res[::-1] or "0"
-
-    index = [0] # workaround for missing nonlocal
-
-    def subfmt(m):
-        i = index[0]
-        arg = args[i]
-        if i > len(args): return repr(arg)
-
-        flags, width, precision, length, specifier = m.groups()
-
-        if specifier == "o": v = to_base(int(arg), 8)
-        elif specifier == "x": v = to_base(int(arg), 16)
-        else: fail("format:", flags, width, precision, length, specifier)
-
-        if width != None:
-            w = int(width)
-            if w > 0:
-                v = max(w - len(v), 0) * (" " if flags == None else flags) + v
-
-        index[0] += 1
-        return v
-
-    return r.sub(subfmt, s)
-        
-
 def test_sre_character_literals():
     for i in [0, 8, 16, 32, 64, 127, 128, 255, 256, 0xFFFF, 0x10000, 0x10FFFF]:
         if i < 256:
@@ -1620,16 +1741,16 @@ def test_sre_character_literals():
     assertTrue(re.match(r"\01", "\001"))
     assertTrue(re.match(r"\018", "\0018"))
     checkPatternError(r"\567",
-                            r'octal escape value \567 outside of ' +
-                            r'range 0-0o377', 0)
-    checkPatternError(r"\911", 'invalid group reference 91', 1)
-    checkPatternError(r"\x1", r'incomplete escape \x1', 0)
-    checkPatternError(r"\x1z", r'incomplete escape \x1', 0)
-    checkPatternError(r"\u123", r'incomplete escape \u123', 0)
-    checkPatternError(r"\u123z", r'incomplete escape \u123', 0)
-    checkPatternError(r"\U0001234", r'incomplete escape \U0001234', 0)
-    checkPatternError(r"\U0001234z", r'incomplete escape \U0001234', 0)
-    checkPatternError(r"\U00110000", r'bad escape \U00110000', 0)
+                      r'octal escape value \567 outside of ' +
+                      r'range 0-0o377')
+    checkPatternError(r"\911", 'invalid group reference 91')
+    checkPatternError(r"\x1", r'incomplete escape \x1')
+    checkPatternError(r"\x1z", r'incomplete escape \x1')
+    checkPatternError(r"\u123", r'incomplete escape \u123')
+    checkPatternError(r"\u123z", r'incomplete escape \u123')
+    checkPatternError(r"\U0001234", r'incomplete escape \U0001234')
+    checkPatternError(r"\U0001234z", r'incomplete escape \U0001234')
+    checkPatternError(r"\U00110000", r'bad escape \U00110000')
 
 def test_sre_character_class_literals():
     for i in [0, 8, 16, 32, 64, 127, 128, 255, 256, 0xFFFF, 0x10000, 0x10FFFF]:
@@ -1650,30 +1771,23 @@ def test_sre_character_class_literals():
         assertTrue(re.match(format(r"[\U%08x0]", i), chr(i)+"0"))
         assertTrue(re.match(format(r"[\U%08xz]", i), chr(i)+"z"))
     checkPatternError(r"[\567]",
-                            r'octal escape value \567 outside of ' +
-                            r'range 0-0o377', 1)
-    checkPatternError(r"[\911]", r'bad escape \9', 1)
-    checkPatternError(r"[\x1z]", r'incomplete escape \x1', 1)
-    checkPatternError(r"[\u123z]", r'incomplete escape \u123', 1)
-    checkPatternError(r"[\U0001234z]", r'incomplete escape \U0001234', 1)
-    checkPatternError(r"[\U00110000]", r'bad escape \U00110000', 1)
+                      r'octal escape value \567 outside of ' +
+                      r'range 0-0o377')
+    checkPatternError(r"[\911]", r'bad escape \9')
+    checkPatternError(r"[\x1z]", r'incomplete escape \x1')
+    checkPatternError(r"[\u123z]", r'incomplete escape \u123')
+    checkPatternError(r"[\U0001234z]", r'incomplete escape \U0001234')
+    checkPatternError(r"[\U00110000]", r'bad escape \U00110000')
     assertTrue(re.match(r"[\U0001d49c-\U0001d4b5]", "\U0001d49e"))
-
-# fix for starlark; catb = concat bytes
-def catb(*args):
-    l = []
-    for arg in args:
-        l += list(arg.elems())
-    return bytes(l)
 
 def test_sre_byte_literals():
     for i in [0, 8, 16, 32, 64, 127, 128, 255]:
         assertTrue(re.match(bytes(format(r"\%03o", i)), bytes([i])))
-        assertTrue(re.match(bytes(format(r"\%03o0", i)), catb(bytes([i]),b"0")))
-        assertTrue(re.match(bytes(format(r"\%03o8", i)), catb(bytes([i]), b"8")))
+        assertTrue(re.match(bytes(format(r"\%03o0", i)), bcat(bytes([i]),b"0")))
+        assertTrue(re.match(bytes(format(r"\%03o8", i)), bcat(bytes([i]), b"8")))
         assertTrue(re.match(bytes(format(r"\x%02x", i)), bytes([i])))
-        assertTrue(re.match(bytes(format(r"\x%02x0", i)), catb(bytes([i]), b"0")))
-        assertTrue(re.match(bytes(format(r"\x%02xz", i)), catb(bytes([i]), b"z")))
+        assertTrue(re.match(bytes(format(r"\x%02x0", i)), bcat(bytes([i]), b"0")))
+        assertTrue(re.match(bytes(format(r"\x%02xz", i)), bcat(bytes([i]), b"z")))
     assertRaises(lambda: re.compile(b"\\u1234"))
     assertRaises(lambda: re.compile(b"\\U00012345"))
     assertTrue(re.match(b"\\0", b"\000"))
@@ -1681,11 +1795,11 @@ def test_sre_byte_literals():
     assertTrue(re.match(b"\\01", b"\001"))
     assertTrue(re.match(b"\\018", b"\0018"))
     checkPatternError(b"\\567",
-                            r'octal escape value \567 outside of ' +
-                            r'range 0-0o377', 0)
-    checkPatternError(b"\\911", 'invalid group reference 91', 1)
-    checkPatternError(b"\\x1", r'incomplete escape \x1', 0)
-    checkPatternError(b"\\x1z", r'incomplete escape \x1', 0)
+                      r'octal escape value \567 outside of ' +
+                      r'range 0-0o377')
+    checkPatternError(b"\\911", 'invalid group reference 91')
+    checkPatternError(b"\\x1", r'incomplete escape \x1')
+    checkPatternError(b"\\x1z", r'incomplete escape \x1')
 
 def test_sre_byte_class_literals():
     for i in [0, 8, 16, 32, 64, 127, 128, 255]:
@@ -1700,21 +1814,21 @@ def test_sre_byte_class_literals():
     assertRaises(lambda: re.compile(b"[\\u1234]"))
     assertRaises(lambda: re.compile(b"[\\U00012345]"))
     checkPatternError(b"[\\567]",
-                            r'octal escape value \567 outside of ' +
-                            r'range 0-0o377', 1)
-    checkPatternError(b"[\\911]", r'bad escape \9', 1)
-    checkPatternError(b"[\\x1z]", r'incomplete escape \x1', 1)
+                      r'octal escape value \567 outside of ' +
+                      r'range 0-0o377')
+    checkPatternError(b"[\\911]", r'bad escape \9')
+    checkPatternError(b"[\\x1z]", r'incomplete escape \x1')
 
 def test_character_set_errors():
-    checkPatternError(r'[', 'missing closing ]: `[`', 0)
-    checkPatternError(r'[^', 'missing closing ]: `[^`', 0)
-    checkPatternError(r'[a', 'missing closing ]: `[a`', 0)
+    checkPatternError(r'[', 'unterminated character set')
+    checkPatternError(r'[^', 'unterminated character set')
+    checkPatternError(r'[a', 'unterminated character set')
     # bug 545855 -- This pattern failed to cause a compile error as it
     # should, instead provoking a TypeError.
-    checkPatternError(r"[a-", 'missing closing ]: `[a-`', 0)
-    # Works in Go: checkPatternError(r"[\w-b]", r'bad character range \w-b', 1)
-    # Works in Go: checkPatternError(r"[a-\w]", r'bad character range a-\w', 1)
-    checkPatternError(r"[b-a]", 'invalid character class range: `b-a`', 1)
+    checkPatternError(r"[a-", 'unterminated character set')
+    checkPatternError(r"[\w-b]", r'bad character range \w-b')
+    checkPatternError(r"[a-\w]", r'bad character range a-\w')
+    checkPatternError(r"[b-a]", 'bad character range b-a')
 
 def test_bug_113254():
     assertEqual(re.match(r'(a)|(b)', 'b').start(1), -1)
@@ -1755,9 +1869,10 @@ def test_stack_overflow():
 def test_nothing_to_repeat():
     for reps in '*', '+', '?', '{1,2}':
         for mod in '', '?':
-            err = 'missing argument to repetition operator: `%s%s`' % (reps, mod)
-            checkPatternError('%s%s' % (reps, mod), err, 0)
-            checkPatternError('(?:%s%s)' % (reps, mod), err, 3)
+            checkPatternError('%s%s' % (reps, mod),
+                              'nothing to repeat')
+            checkPatternError('(?:%s%s)' % (reps, mod),
+                              'nothing to repeat')
 
 def test_multiple_repeat():
     for outer_reps in '*', '+', '?', '{1,2}':
@@ -1768,8 +1883,8 @@ def test_multiple_repeat():
                     if inner_mod + outer_reps in ('?', '+'):
                         continue
                     inner_op = inner_reps + inner_mod
-                    assertRaisesRegex(lambda: re.compile(r'x%s%s' % (inner_op, outer_op)),
-                                 'invalid nested repetition operator')
+                    checkPatternError(r'x%s%s' % (inner_op, outer_op),
+                            'multiple repeat')
 
 def test_unlimited_zero_width_repeat():
     # Issue #9669
@@ -1808,11 +1923,12 @@ def test_bug_725106():
     assertEqual(re.match('^((a)c|[ab])*?c', 'abc').groups(),
                         ('b', None))
 
-def test_bug_764548():
-    # bug 764548, re.compile() barfs on str/unicode subclasses
-    def my_unicode(str): return str
-    pat = re.compile(my_unicode("abc"))
-    assertIsNone(pat.match("xyz"))
+def test_bug_725149():
+    # mark_stack_base restoring before restoring marks
+    assertEqual(re.match('(a)(?:(?=(b)*)c)*', 'abb').groups(),
+                        ('a', None))
+    assertEqual(re.match('(a)((?!(b)*))*', 'abb').groups(),
+                        ('a', None, None))
 
 def test_finditer():
     iter = re.finditer(r":+", "a:b::c:::d")
@@ -1847,6 +1963,11 @@ def test_bug_931848():
     pattern = "[\u002E\u3002\uFF0E\uFF61]"
     assertEqual(re.compile(pattern).split("a.b.c"),
                         ['a','b','c'])
+
+def test_bug_581080():
+    find = [m.span() for m in re.finditer(r"\s", "a b")]
+    expect = [(1,2)]
+    assertEqual(find, expect)
 
 def test_bug_817234():
     find = [m.span() for m in re.finditer(r".*", "asdf")]
@@ -1911,6 +2032,23 @@ def test_inline_flags():
     q = p.match('\n' + upper_char)
     assertTrue(q)
 
+    assertTrue(re.match('(?ix) ' + upper_char, lower_char))
+    assertTrue(re.match('(?ix) ' + lower_char, upper_char))
+    assertTrue(re.match(' (?i) ' + upper_char, lower_char, re.X))
+    assertTrue(re.match('(?x) (?i) ' + upper_char, lower_char))
+    assertTrue(re.match(' (?x) (?i) ' + upper_char, lower_char, re.X))
+
+    msg = "global flags not at the start of the expression"
+    checkPatternError(upper_char + '(?i)', msg)
+
+    checkPatternError('(?s).(?i)' + upper_char, msg)
+    checkPatternError('(?i) ' + upper_char + ' (?x)', msg)
+    checkPatternError(' (?x) (?i) ' + upper_char, msg)
+    checkPatternError('^(?i)' + upper_char, msg)
+    checkPatternError('$|(?i)' + upper_char, msg)
+    checkPatternError('(?:(?i)' + upper_char + ')', msg)
+    checkPatternError('(^)?(?(1)(?i)' + upper_char + ')', msg)
+    checkPatternError('($)?(?(1)|(?i)' + upper_char + ')', msg)
 
 def test_dollar_matches_twice():
     r"""Test that $ does not include \n
@@ -1946,19 +2084,18 @@ def test_ascii_and_unicode_flag():
         pat = re.compile(r'\w', flags)
         assertTrue(pat.match('\u00E0'))
     pat = re.compile('\u00C0', re.ASCII | re.IGNORECASE)
-    # Does not work: assertIsNone(pat.match('\u00E0'))
-    # Not supported: pat = re.compile('(?a)\u00C0', re.IGNORECASE)
-    # Not supported: assertIsNone(pat.match('\u00E0'))
+    assertIsNone(pat.match('\u00E0'))
+    pat = re.compile('(?a)\u00C0', re.IGNORECASE)
+    assertIsNone(pat.match('\u00E0'))
     pat = re.compile(r'\w', re.ASCII)
     assertIsNone(pat.match('\u00E0'))
-    # Not supported: pat = re.compile(r'(?a)\w')
-    # Not supported: assertIsNone(pat.match('\u00E0'))
+    pat = re.compile(r'(?a)\w')
+    assertIsNone(pat.match('\u00E0'))
     # Bytes patterns
-    for flags in (0, re.ASCII):
-        # Not supported: pat = re.compile(b'\u00C0', flags | re.IGNORECASE)
-        # Not supported: assertIsNone(pat.match(b'\u00E0'))
-        pat = re.compile(b'\\w', flags)
-        assertIsNone(pat.match(b'\u00E0'))
+    pat = re.compile(b'\xc0', re.ASCII | re.IGNORECASE)
+    assertIsNone(pat.match(b'\xe0'))
+    pat = re.compile(b'\\w', re.ASCII)
+    assertIsNone(pat.match(b'\xe0'))
     # Incompatibilities
     assertRaises(lambda: re.compile(b'\\w', re.UNICODE))
     assertRaises(lambda: re.compile(b'(?u)\\w'))
@@ -1975,17 +2112,57 @@ def test_scoped_flags():
     assertIsNone(re.match(r'(?i:(?-i:a)b)', 'Ab'))
     assertTrue(re.match(r'(?i:(?-i:a)b)', 'aB'))
 
-    checkPatternError(r'(?-', 'invalid or unsupported Perl syntax: `(?-`', 3)
-    checkPatternError(r'(?-+', 'invalid or unsupported Perl syntax: `(?-+`', 3)
-    checkPatternError(r'(?-z', 'invalid or unsupported Perl syntax: `(?-z`', 3)
-    checkPatternError(r'(?-i', 'invalid or unsupported Perl syntax: `(?-i`', 4)
-    # Compiles without errors: checkPatternError(r'(?-i)', 'missing :', 4)
-    checkPatternError(r'(?-i+', 'invalid or unsupported Perl syntax: `(?-i+`', 4)
-    checkPatternError(r'(?-iz', 'invalid or unsupported Perl syntax: `(?-iz`', 4)
-    checkPatternError(r'(?i:', 'missing closing ): `(?i:`', 0)
-    checkPatternError(r'(?i', 'invalid or unsupported Perl syntax: `(?i`', 3)
-    checkPatternError(r'(?i+', 'invalid or unsupported Perl syntax: `(?i+`', 3)
-    checkPatternError(r'(?iz', 'invalid or unsupported Perl syntax: `(?iz`', 3)
+    assertTrue(re.match(r'\w(?a:\W)\w', '\u00E0\u00E0\u00E0'))
+    assertTrue(re.match(r'(?a:\W(?u:\w)\W)', '\u00E0\u00E0\u00E0'))
+    assertTrue(re.match(r'\W(?u:\w)\W', '\u00E0\u00E0\u00E0', re.ASCII))
+
+    checkPatternError(r'(?a)(?-a:\w)',
+            "bad inline flags: cannot turn off flags 'a', 'u' and 'L'")
+    checkPatternError(r'(?i-i:a)',
+            'bad inline flags: flag turned on and off')
+    checkPatternError(r'(?au:a)',
+            "bad inline flags: flags 'a', 'u' and 'L' are incompatible")
+    checkPatternError(b'(?aL:a)',
+            "bad inline flags: flags 'a', 'u' and 'L' are incompatible")
+
+    checkPatternError(r'(?-', 'missing flag')
+    checkPatternError(r'(?-+', 'missing flag')
+    checkPatternError(r'(?-z', 'unknown flag')
+    checkPatternError(r'(?-i', 'missing :')
+    checkPatternError(r'(?-i)', 'missing :')
+    checkPatternError(r'(?-i+', 'missing :')
+    checkPatternError(r'(?-iz', 'unknown flag')
+    checkPatternError(r'(?i:', 'missing ), unterminated subpattern')
+    checkPatternError(r'(?i', 'missing -, : or )')
+    checkPatternError(r'(?i+', 'missing -, : or )')
+    checkPatternError(r'(?iz', 'unknown flag')
+
+def test_ignore_spaces():
+    for space in " \t\n\r\v\f".elems():
+        assertTrue(re.fullmatch(space + 'a', 'a', re.VERBOSE))
+    for space in (b" ", b"\t", b"\n", b"\r", b"\v", b"\f"):
+        assertTrue(re.fullmatch(bcat(space, b'a'), b'a', re.VERBOSE))
+    assertTrue(re.fullmatch('(?x) a', 'a'))
+    assertTrue(re.fullmatch(' (?x) a', 'a', re.VERBOSE))
+    assertTrue(re.fullmatch('(?x) (?x) a', 'a'))
+    assertTrue(re.fullmatch(' a(?x: b) c', ' ab c'))
+    assertTrue(re.fullmatch(' a(?-x: b) c', 'a bc', re.VERBOSE))
+    assertTrue(re.fullmatch('(?x) a(?-x: b) c', 'a bc'))
+    assertTrue(re.fullmatch('(?x) a| b', 'a'))
+    assertTrue(re.fullmatch('(?x) a| b', 'b'))
+
+def test_comments():
+    assertTrue(re.fullmatch('#x\na', 'a', re.VERBOSE))
+    assertTrue(re.fullmatch(b'#x\na', b'a', re.VERBOSE))
+    assertTrue(re.fullmatch('(?x)#x\na', 'a'))
+    assertTrue(re.fullmatch('#x\n(?x)#y\na', 'a', re.VERBOSE))
+    assertTrue(re.fullmatch('(?x)#x\n(?x)#y\na', 'a'))
+    assertTrue(re.fullmatch('#x\na(?x:#y\nb)#z\nc', '#x\nab#z\nc'))
+    assertTrue(re.fullmatch('#x\na(?-x:#y\nb)#z\nc', 'a#y\nbc',
+                                    re.VERBOSE))
+    assertTrue(re.fullmatch('(?x)#x\na(?-x:#y\nb)#z\nc', 'a#y\nbc'))
+    assertTrue(re.fullmatch('(?x)#x\na|#y\nb', 'a'))
+    assertTrue(re.fullmatch('(?x)#x\na|#y\nb', 'b'))
 
 def test_bug_6509():
     # Replacement strings of both types must parse properly.
@@ -2025,25 +2202,33 @@ def test_compile():
 def test_bug_16688():
     # Issue 16688: Backreferences make case-insensitive regex fail on
     # non-ASCII strings.
+    assertEqual(re.findall(r"(?i)(a)\1", "aa \u0100"), ['a'])
     assertEqual(re.match(r"(?s).{1,3}", "\u0100\u0100").span(), (0, 4))
 
 def test_repeat_minmax_overflow():
     # Issue #13169
-    # Note: the maximum repeat count of Go is 1000
     string = "x" * 100000
     assertEqual(re.match(r".{1000}", string).span(), (0, 1000))
     assertEqual(re.match(r".{,1000}", string).span(), (0, 1000))
     assertEqual(re.match(r".{1000,}?", string).span(), (0, 1000))
-    # 2**128 should be big enough to overflow both SRE_CODE and Py_ssize_t.
-    assertRaises(lambda: re.compile(r".{%d}" % pow(2,128)))
-    assertRaises(lambda: re.compile(r".{,%d}" % pow(2,128)))
-    assertRaises(lambda: re.compile(r".{%d,}?" % pow(2,128)))
-    assertRaises(lambda: re.compile(r".{%d,%d}" % (pow(2,129), pow(2,128))))
+    assertRaises(lambda: re.match(r".{1001}", string))
+    assertRaises(lambda: re.match(r".{,1001}", string))
+    assertRaises(lambda: re.match(r".{1001,}?", string))
+    # 1<<128 should be big enough to overflow both SRE_CODE and Py_ssize_t.
+    assertRaises(lambda: re.compile(r".{%d}" % 1<<128))
+    assertRaises(lambda: re.compile(r".{,%d}" % 1<<128))
+    assertRaises(lambda: re.compile(r".{%d,}?" % 1<<128))
+    assertRaises(lambda: re.compile(r".{%d,%d}" % (1<<129, 1<<128)))
+
+def test_backref_group_name_in_exception():
+    # Issue 17341: Poor error message when compiling invalid regex
+    checkPatternError('(?P=<foo>)',
+                      "bad character in group name '<foo>'")
 
 def test_group_name_in_exception():
     # Issue 17341: Poor error message when compiling invalid regex
     checkPatternError('(?P<?foo>)',
-                      "invalid named capture: `(?P<?foo>`", 4)
+                      "bad character in group name '?foo'")
 
 def test_issue17998():
     for reps in '*', '+', '?', '{1}':
@@ -2056,14 +2241,14 @@ def test_issue17998():
                                 [b'xyz'], msg=pattern)
 
 def test_match_repr():
-    string = 'abracadabra'
-    m = re.search(r'(.+)(.*?)', string)
-    pattern = r"<re\.match object; span=\(0, 11\), match='abracadabra'>"
+    string = '[abracadabra]'
+    m = re.search(r'(.+)(.*?)\1', string)
+    pattern = r"<re\.match object; span=\(1, 12\), match='abracadabra'>"
     assertRegex(repr(m), pattern)
 
-    string = b'abracadabra'
-    m = re.search(b'(.+)(.*?)', string)
-    pattern = r"<re\.match object; span=\(0, 11\), match=b'abracadabra'>"
+    string = b'[abracadabra]'
+    m = re.search(b'(.+)(.*?)\\1', string)
+    pattern = r"<re\.match object; span=\(1, 12\), match=b'abracadabra'>"
     assertRegex(repr(m), pattern)
 
     first, second = list(re.finditer("(aa)|(bb)", "aa bb"))
@@ -2077,6 +2262,7 @@ def test_zerowidth():
     # Issues 852532, 1647489, 3262, 25054.
     assertEqual(re.split(r"\b", "a::bc"), ['', 'a', '::', 'bc', ''])
     assertEqual(re.split(r"\b|:+", "a::bc"), ['', 'a', '', '', 'bc', ''])
+    # SKIP because regexp2 does not support longest match search:
     # assertEqual(re.split(r"(?<!\w)(?=\w)|:+", "a::bc"), ['', 'a', '', 'bc'])
     # assertEqual(re.split(r"(?<=\w)(?!\w)|:+", "a::bc"), ['a', '', 'bc', ''])
 
@@ -2126,8 +2312,8 @@ def test_bug_20998():
     # with ignore case.
     assertEqual(re.fullmatch('[a-c]+', 'ABC', re.I).span(), (0, 3))
 
-# TODO: remove this or next
 def check_en_US_iso88591():
+    # locale.setlocale(locale.LC_CTYPE, 'en_US.iso88591')
     assertTrue(re.match(b'\xc5\xe5', b'\xc5\xe5', re.L|re.I))
     assertTrue(re.match(b'\xc5', b'\xe5', re.L|re.I))
     assertTrue(re.match(b'\xe5', b'\xc5', re.L|re.I))
@@ -2136,6 +2322,7 @@ def check_en_US_iso88591():
     assertTrue(re.match(b'(?Li)\xe5', b'\xc5'))
 
 def check_en_US_utf8():
+    # locale.setlocale(locale.LC_CTYPE, 'en_US.utf8')
     assertTrue(re.match(b'\xc5\xe5', b'\xc5\xe5', re.L|re.I))
     assertIsNone(re.match(b'\xc5', b'\xe5', re.L|re.I))
     assertIsNone(re.match(b'\xe5', b'\xc5', re.L|re.I))
@@ -2144,21 +2331,30 @@ def check_en_US_utf8():
     assertIsNone(re.match(b'(?Li)\xe5', b'\xc5'))
 
 def test_error():
-    assertRaisesRegex(lambda: re.compile('(\u20ac))'), r'unexpected \):')
+    assertRaises(lambda: re.compile('(\u20ac))'))
     # Bytes pattern
     assertRaises(lambda: re.compile(b'(\xa4))'))
+    # Multiline pattern
+    assertRaises(lambda: re.compile("""
+            (
+                abc
+            )
+            )
+            (
+            """, re.VERBOSE))
 
 def test_misc_errors():
-    checkPatternError(r'(', 'missing closing ): `(`', 0)
-    checkPatternError(r'((a|b)', 'missing closing ): `((a|b)`', 0)
-    checkPatternError(r'(a|b))', 'unexpected ): `(a|b))`', 5)
-    checkSyntaxError(r'(?z)', '(?z')
-    checkSyntaxError(r'(?iz)', '(?iz')
-    checkSyntaxError(r'(?i', '(?i')
-    checkSyntaxError(r'(?#abc', '(?#')
-    checkSyntaxError(r'(?<', '(?<')
-    checkSyntaxError(r'(?<>)', '(?<')
-    checkSyntaxError(r'(?', '(?')
+    checkPatternError(r'(', 'missing ), unterminated subpattern')
+    checkPatternError(r'((a|b)', 'missing ), unterminated subpattern')
+    checkPatternError(r'(a|b))', 'unbalanced parenthesis')
+    checkPatternError(r'(?P', 'unexpected end of pattern')
+    checkPatternError(r'(?z)', 'unknown extension ?z')
+    checkPatternError(r'(?iz)', 'unknown flag')
+    checkPatternError(r'(?i', 'missing -, : or )')
+    checkPatternError(r'(?#abc', 'missing ), unterminated comment')
+    checkPatternError(r'(?<', 'unexpected end of pattern')
+    checkPatternError(r'(?<>)', 'unknown extension ?<>')
+    checkPatternError(r'(?', 'unexpected end of pattern')
 
 def test_pattern_compare():
     pattern1 = re.compile('abc', re.IGNORECASE)
@@ -2201,6 +2397,40 @@ def test_pattern_compare_bytes():
     pattern3 = re.compile('abc')
     assertNotEqual(pattern3, pattern1)
 
+def test_bug_34294():
+    # Issue 34294: wrong capturing groups
+
+    # exists since Python 2
+    s = "a\tx"
+    p = r"\b(?=(\t)|(x))x"
+    assertEqual(re.search(p, s).groups(), (None, 'x'))
+
+    # introduced in Python 3.7.0
+    s = "ab"
+    p = r"(?=(.)(.)?)"
+    assertEqual(re.findall(p, s),
+                        [('a', 'b'), ('b', '')])
+    assertEqual([m.groups() for m in re.finditer(p, s)],
+                        [('a', 'b'), ('b', None)])
+
+    # test-cases provided by issue34294, introduced in Python 3.7.0
+    p = r"(?=<(?P<tag>\w+)/?>(?:(?P<text>.+?)</(?P=tag)>)?)"
+    s = "<test><foo2/></test>"
+    assertEqual(re.findall(p, s),
+                        [('test', '<foo2/>'), ('foo2', '')])
+    assertEqual([m.groupdict() for m in re.finditer(p, s)],
+                        [{'tag': 'test', 'text': '<foo2/>'},
+                        {'tag': 'foo2', 'text': None}])
+    s = "<test>Hello</test><foo/>"
+    assertEqual([m.groupdict() for m in re.finditer(p, s)],
+                        [{'tag': 'test', 'text': 'Hello'},
+                        {'tag': 'foo', 'text': None}])
+    s = "<test>Hello</test><foo/><foo/>"
+    assertEqual([m.groupdict() for m in re.finditer(p, s)],
+                        [{'tag': 'test', 'text': 'Hello'},
+                        {'tag': 'foo', 'text': None},
+                        {'tag': 'foo', 'text': None}])
+
 def test_MARK_PUSH_macro_bug():
     # issue35859, MARK_PUSH() macro didn't protect MARK-0 if it
     # was the only available mark.
@@ -2225,21 +2455,57 @@ def test_MIN_UNTIL_mark_bug():
     assertEqual(m.groups(), ('xyzxc', 'x', 't'))
 
 def test_REPEAT_ONE_mark_bug():
-    # Removed unsupported tests
+    # issue35859
+    # JUMP_REPEAT_ONE_1 should MARK_PUSH() if in a repeat
+    s = 'aabaab'
+    p = r'(?:[^b]*a(?=(b)|(a))ab)*'
+    m = re.match(p, s)
+    assertEqual(m.span(), (0, 6))
+    assertEqual(m.span(2), (4, 5))
+    assertEqual(m.groups(), (None, 'a'))
+
+    # JUMP_REPEAT_ONE_2 should MARK_PUSH() if in a repeat
+    s = 'abab'
+    p = r'(?:[^b]*(?=(b)|(a))ab)*'
+    m = re.match(p, s)
+    assertEqual(m.span(), (0, 4))
+    assertEqual(m.span(2), (2, 3))
+    assertEqual(m.groups(), (None, 'a'))
+
     assertEqual(re.match(r'(ab?)*?b', 'ab').groups(), ('a',))
 
 def test_MIN_REPEAT_ONE_mark_bug():
-    # Removed unsupported tests
+    # issue35859
+    # JUMP_MIN_REPEAT_ONE should MARK_PUSH() if in a repeat
+    s = 'abab'
+    p = r'(?:.*?(?=(a)|(b))b)*'
+    m = re.match(p, s)
+    assertEqual(m.span(), (0, 4))
+    assertEqual(m.span(2), (3, 4))
+    assertEqual(m.groups(), (None, 'b'))
+
     s = 'axxzaz'
     p = r'(?:a*?(xx)??z)*'
     assertEqual(re.match(p, s).groups(), ('xx',))
+
+def test_ASSERT_NOT_mark_bug():
+    # Fixed in issue35859, reported in issue725149.
+    # JUMP_ASSERT_NOT should LASTMARK_SAVE()
+    assertEqual(re.match(r'(?!(..)c)', 'ab').groups(), (None,))
+
+    # JUMP_ASSERT_NOT should MARK_PUSH() if in a repeat
+    m = re.match(r'((?!(ab)c)(.))*', 'abab')
+    assertEqual(m.span(), (0, 4))
+    assertEqual(m.span(1), (3, 4))
+    assertEqual(m.span(3), (3, 4))
+    assertEqual(m.groups(), ('b', None, 'b'))
 
 def test_bug_40736():
     assertRaisesRegex(lambda: re.search("x*", 5), "got int")
     assertRaisesRegex(lambda: re.search("x*", type), "got builtin_function_or_method")
 
 def test_search_anchor_at_beginning():
-    s = 'x'*pow(10,7)
+    s = 'x'*10000000 # 10**7
     def fn():
         for p in r'\Ay', r'^y':
             assertIsNone(re.search(p, s))
@@ -2250,6 +2516,168 @@ def test_search_anchor_at_beginning():
     # Without optimization it takes 1 second on my computer.
     # With optimization -- 0.0003 seconds.
     assertLess(measure(fn), 0.25)
+
+def test_possessive_quantifiers():
+    """Test Possessive Quantifiers
+    Test quantifiers of the form @+ for some repetition operator @,
+    e.g. x{3,5}+ meaning match from 3 to 5 greadily and proceed
+    without creating a stack frame for rolling the stack back and
+    trying 1 or more fewer matches."""
+    # Not supported by either Go regex engine; skip.
+    return
+    assertIsNone(re.match('e*+e', 'eeee'))
+    assertEqual(re.match('e++a', 'eeea').group(0), 'eeea')
+    assertEqual(re.match('e?+a', 'ea').group(0), 'ea')
+    assertEqual(re.match('e{2,4}+a', 'eeea').group(0), 'eeea')
+    assertIsNone(re.match('(.)++.', 'ee'))
+    assertEqual(re.match('(ae)*+a', 'aea').groups(), ('ae',))
+    assertEqual(re.match('([ae][ae])?+a', 'aea').groups(),
+                        ('ae',))
+    assertEqual(re.match('(e?){2,4}+a', 'eeea').groups(),
+                        ('',))
+    assertEqual(re.match('()*+a', 'a').groups(), ('',))
+    assertEqual(re.search('x*+', 'axx').span(), (0, 0))
+    assertEqual(re.search('x++', 'axx').span(), (1, 3))
+    assertEqual(re.match('a*+', 'xxx').span(), (0, 0))
+    assertEqual(re.match('x*+', 'xxxa').span(), (0, 3))
+    assertIsNone(re.match('a++', 'xxx'))
+    assertIsNone(re.match(r"^(\w){1}+$", "abc"))
+    assertIsNone(re.match(r"^(\w){1,2}+$", "abc"))
+
+    assertEqual(re.match(r"^(\w){3}+$", "abc").group(1), "c")
+    assertEqual(re.match(r"^(\w){1,3}+$", "abc").group(1), "c")
+    assertEqual(re.match(r"^(\w){1,4}+$", "abc").group(1), "c")
+
+    assertIsNone(re.match("^x{1}+$", "xxx"))
+    assertIsNone(re.match("^x{1,2}+$", "xxx"))
+
+    assertTrue(re.match("^x{3}+$", "xxx"))
+    assertTrue(re.match("^x{1,3}+$", "xxx"))
+    assertTrue(re.match("^x{1,4}+$", "xxx"))
+
+    assertIsNone(re.match("^x{}+$", "xxx"))
+    assertTrue(re.match("^x{}+$", "x{}"))
+
+def test_fullmatch_possessive_quantifiers():
+    # Not supported by either Go regex engine; skip.
+    return
+    assertTrue(re.fullmatch(r'a++', 'a'))
+    assertTrue(re.fullmatch(r'a*+', 'a'))
+    assertTrue(re.fullmatch(r'a?+', 'a'))
+    assertTrue(re.fullmatch(r'a{1,3}+', 'a'))
+    assertIsNone(re.fullmatch(r'a++', 'ab'))
+    assertIsNone(re.fullmatch(r'a*+', 'ab'))
+    assertIsNone(re.fullmatch(r'a?+', 'ab'))
+    assertIsNone(re.fullmatch(r'a{1,3}+', 'ab'))
+    assertTrue(re.fullmatch(r'a++b', 'ab'))
+    assertTrue(re.fullmatch(r'a*+b', 'ab'))
+    assertTrue(re.fullmatch(r'a?+b', 'ab'))
+    assertTrue(re.fullmatch(r'a{1,3}+b', 'ab'))
+
+    assertTrue(re.fullmatch(r'(?:ab)++', 'ab'))
+    assertTrue(re.fullmatch(r'(?:ab)*+', 'ab'))
+    assertTrue(re.fullmatch(r'(?:ab)?+', 'ab'))
+    assertTrue(re.fullmatch(r'(?:ab){1,3}+', 'ab'))
+    assertIsNone(re.fullmatch(r'(?:ab)++', 'abc'))
+    assertIsNone(re.fullmatch(r'(?:ab)*+', 'abc'))
+    assertIsNone(re.fullmatch(r'(?:ab)?+', 'abc'))
+    assertIsNone(re.fullmatch(r'(?:ab){1,3}+', 'abc'))
+    assertTrue(re.fullmatch(r'(?:ab)++c', 'abc'))
+    assertTrue(re.fullmatch(r'(?:ab)*+c', 'abc'))
+    assertTrue(re.fullmatch(r'(?:ab)?+c', 'abc'))
+    assertTrue(re.fullmatch(r'(?:ab){1,3}+c', 'abc'))
+
+def test_findall_possessive_quantifiers():
+    # Not supported by either Go regex engine; skip.
+    return
+    assertEqual(re.findall(r'a++', 'aab'), ['aa'])
+    assertEqual(re.findall(r'a*+', 'aab'), ['aa', '', ''])
+    assertEqual(re.findall(r'a?+', 'aab'), ['a', 'a', '', ''])
+    assertEqual(re.findall(r'a{1,3}+', 'aab'), ['aa'])
+
+    assertEqual(re.findall(r'(?:ab)++', 'ababc'), ['abab'])
+    assertEqual(re.findall(r'(?:ab)*+', 'ababc'), ['abab', '', ''])
+    assertEqual(re.findall(r'(?:ab)?+', 'ababc'), ['ab', 'ab', '', ''])
+    assertEqual(re.findall(r'(?:ab){1,3}+', 'ababc'), ['abab'])
+
+def test_atomic_grouping():
+    """Test Atomic Grouping
+    Test non-capturing groups of the form (?>...), which does
+    not maintain any stack point created within the group once the
+    group is finished being evaluated."""
+    pattern1 = re.compile(r'a(?>bc|b)c')
+    assertIsNone(pattern1.match('abc'))
+    assertTrue(pattern1.match('abcc'))
+    assertIsNone(re.match(r'(?>.*).', 'abc'))
+    # SKIP: assertTrue(re.match(r'(?>x)++', 'xxx'))
+    # SKIP: assertTrue(re.match(r'(?>x++)', 'xxx'))
+    # SKIP: assertIsNone(re.match(r'(?>x)++x', 'xxx'))
+    # SKIP: assertIsNone(re.match(r'(?>x++)x', 'xxx'))
+
+def test_fullmatch_atomic_grouping():
+    assertTrue(re.fullmatch(r'(?>a+)', 'a'))
+    assertTrue(re.fullmatch(r'(?>a*)', 'a'))
+    assertTrue(re.fullmatch(r'(?>a?)', 'a'))
+    assertTrue(re.fullmatch(r'(?>a{1,3})', 'a'))
+    assertIsNone(re.fullmatch(r'(?>a+)', 'ab'))
+    assertIsNone(re.fullmatch(r'(?>a*)', 'ab'))
+    assertIsNone(re.fullmatch(r'(?>a?)', 'ab'))
+    assertIsNone(re.fullmatch(r'(?>a{1,3})', 'ab'))
+    assertTrue(re.fullmatch(r'(?>a+)b', 'ab'))
+    assertTrue(re.fullmatch(r'(?>a*)b', 'ab'))
+    assertTrue(re.fullmatch(r'(?>a?)b', 'ab'))
+    assertTrue(re.fullmatch(r'(?>a{1,3})b', 'ab'))
+
+    assertTrue(re.fullmatch(r'(?>(?:ab)+)', 'ab'))
+    assertTrue(re.fullmatch(r'(?>(?:ab)*)', 'ab'))
+    assertTrue(re.fullmatch(r'(?>(?:ab)?)', 'ab'))
+    assertTrue(re.fullmatch(r'(?>(?:ab){1,3})', 'ab'))
+    assertIsNone(re.fullmatch(r'(?>(?:ab)+)', 'abc'))
+    assertIsNone(re.fullmatch(r'(?>(?:ab)*)', 'abc'))
+    assertIsNone(re.fullmatch(r'(?>(?:ab)?)', 'abc'))
+    assertIsNone(re.fullmatch(r'(?>(?:ab){1,3})', 'abc'))
+    assertTrue(re.fullmatch(r'(?>(?:ab)+)c', 'abc'))
+    assertTrue(re.fullmatch(r'(?>(?:ab)*)c', 'abc'))
+    assertTrue(re.fullmatch(r'(?>(?:ab)?)c', 'abc'))
+    assertTrue(re.fullmatch(r'(?>(?:ab){1,3})c', 'abc'))
+
+def test_findall_atomic_grouping():
+    assertEqual(re.findall(r'(?>a+)', 'aab'), ['aa'])
+    assertEqual(re.findall(r'(?>a*)', 'aab'), ['aa', '', ''])
+    assertEqual(re.findall(r'(?>a?)', 'aab'), ['a', 'a', '', ''])
+    assertEqual(re.findall(r'(?>a{1,3})', 'aab'), ['aa'])
+
+    assertEqual(re.findall(r'(?>(?:ab)+)', 'ababc'), ['abab'])
+    assertEqual(re.findall(r'(?>(?:ab)*)', 'ababc'), ['abab', '', ''])
+    assertEqual(re.findall(r'(?>(?:ab)?)', 'ababc'), ['ab', 'ab', '', ''])
+    assertEqual(re.findall(r'(?>(?:ab){1,3})', 'ababc'), ['abab'])
+
+def test_bug_gh91616():
+    assertTrue(re.fullmatch(r'(?s:(?>.*?\.).*)\Z', "a.txt")) # reproducer
+    assertTrue(re.fullmatch(r'(?s:(?=(?P<g0>.*?\.))(?P=g0).*)\Z', "a.txt"))
+
+def test_bug_gh100061():
+    # gh-100061
+    assertEqual(re.match('(?>(?:.(?!D))+)', 'ABCDE').span(), (0, 2))
+    # SKIP: assertEqual(re.match('(?:.(?!D))++', 'ABCDE').span(), (0, 2))
+    assertEqual(re.match('(?>(?:.(?!D))*)', 'ABCDE').span(), (0, 2))
+    # SKIP: assertEqual(re.match('(?:.(?!D))*+', 'ABCDE').span(), (0, 2))
+    assertEqual(re.match('(?>(?:.(?!D))?)', 'CDE').span(), (0, 0))
+    # SKIP: assertEqual(re.match('(?:.(?!D))?+', 'CDE').span(), (0, 0))
+    assertEqual(re.match('(?>(?:.(?!D)){1,3})', 'ABCDE').span(), (0, 2))
+    # assertEqual(re.match('(?:.(?!D)){1,3}+', 'ABCDE').span(), (0, 2))
+    # gh-106052
+    assertEqual(re.match("(?>(?:ab?c)+)", "aca").span(), (0, 2))
+    # SKIP: assertEqual(re.match("(?:ab?c)++", "aca").span(), (0, 2))
+    assertEqual(re.match("(?>(?:ab?c)*)", "aca").span(), (0, 2))
+    # SKIP: assertEqual(re.match("(?:ab?c)*+", "aca").span(), (0, 2))
+    assertEqual(re.match("(?>(?:ab?c)?)", "a").span(), (0, 0))
+    # SKIP: assertEqual(re.match("(?:ab?c)?+", "a").span(), (0, 0))
+    assertEqual(re.match("(?>(?:ab?c){1,3})", "aca").span(), (0, 2))
+    # assertEqual(re.match("(?:ab?c){1,3}+", "aca").span(), (0, 2))
+
+def test_fail():
+    assertEqual(re.search(r'12(?!)|3', '123')[0], '3')
 
 def check(pattern, expected):
     assertEqual(repr(re.compile(pattern)), expected)
@@ -2315,18 +2743,13 @@ def test_long_pattern():
     assertEqual(r[:30], "re.compile('Very long long lon")
     assertEqual(r[-16:], ", re.IGNORECASE)")
 
-def test_immutable():
-    # bpo-43908: check that re types are immutable
-    def fn1(): re.Match.foo = 1
-    def fn2(): re.Pattern.foo = 1
-    def fn3():
-        pat = re.compile("")
-        tp = type(pat.scanner(""))
-        tp.foo = 1
-
-    assertRaises(fn1)
-    assertRaises(fn2)
-    assertRaises(fn3)
+def test_flags_repr():
+    assertEqual(repr(re.I), "2")
+    assertEqual(repr(re.I|re.S|re.X), "82")
+    assertEqual(repr(re.I|re.S|re.X|(1<<20)), "1048658")
+    assertEqual(repr(~re.I), "-3")
+    assertEqual(repr(~(re.I|re.S|re.X)), "-83")
+    assertEqual(repr(~(re.I|re.S|re.X|(1<<20))), "-1048659")
 
 def test_re_benchmarks():
     're_tests benchmarks'
@@ -2444,6 +2867,11 @@ test_re_match()
 test_group()
 test_match_getitem()
 test_re_fullmatch()
+test_re_groupref_exists()
+test_re_groupref_exists_errors()
+test_re_groupref_exists_validation_bug()
+test_re_groupref_overflow()
+test_re_groupref()
 test_groupdict()
 test_expand()
 test_repeat_minmax()
@@ -2455,6 +2883,8 @@ test_string_boundaries()
 test_bigcharset()
 test_big_codesize()
 test_anyall()
+test_lookahead()
+test_lookbehind()
 test_ignore_case()
 test_ignore_case_set()
 test_ignore_case_range()
@@ -2483,10 +2913,11 @@ test_multiple_repeat()
 test_unlimited_zero_width_repeat()
 test_bug_448951()
 test_bug_725106()
-test_bug_764548()
+test_bug_725149()
 test_finditer()
 test_bug_926075()
 test_bug_931848()
+test_bug_581080()
 test_bug_817234()
 test_bug_6561()
 test_inline_flags()
@@ -2494,11 +2925,14 @@ test_dollar_matches_twice()
 test_bytes_str_mixing()
 test_ascii_and_unicode_flag()
 test_scoped_flags()
+test_ignore_spaces()
+test_comments()
 test_bug_6509()
 test_search_dot_unicode()
 test_compile()
 test_bug_16688()
 test_repeat_minmax_overflow()
+test_backref_group_name_in_exception()
 test_group_name_in_exception()
 test_issue17998()
 test_match_repr()
@@ -2510,12 +2944,23 @@ test_error()
 test_misc_errors()
 test_pattern_compare()
 test_pattern_compare_bytes()
+test_bug_34294()
 test_MARK_PUSH_macro_bug()
 test_MIN_UNTIL_mark_bug()
 test_REPEAT_ONE_mark_bug()
 test_MIN_REPEAT_ONE_mark_bug()
+test_ASSERT_NOT_mark_bug()
 test_bug_40736()
 test_search_anchor_at_beginning()
+test_possessive_quantifiers()
+test_fullmatch_possessive_quantifiers()
+test_findall_possessive_quantifiers()
+test_atomic_grouping()
+test_fullmatch_atomic_grouping()
+test_findall_atomic_grouping()
+test_bug_gh91616()
+test_bug_gh100061()
+test_fail()
 test_without_flags()
 test_single_flag()
 test_multiple_flags()
@@ -2526,6 +2971,6 @@ test_bytes()
 test_locale()
 test_quotes()
 test_long_pattern()
-test_immutable()
+test_flags_repr()
 test_re_benchmarks()
 test_re_tests()

@@ -539,7 +539,7 @@ func (w *subPatternWriter) writeLiteral(r rune) {
 	}
 }
 
-func (w *subPatternWriter) writeFlags(flags int) {
+func (w *subPatternWriter) writeFlags(flags uint32) {
 	if flags&FlagASCII != 0 {
 		w.WriteByte('a')
 	}

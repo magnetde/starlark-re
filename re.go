@@ -47,7 +47,7 @@ type Module struct {
 type cacheKey struct {
 	pattern string
 	isStr   bool
-	flags   int
+	flags   uint32
 }
 
 // Is necessary, because each list element needs to store the key in the map.
@@ -59,22 +59,22 @@ type cacheValue struct {
 // NewModule creates a new re module with the given member dict.
 func NewModule(enableFallback bool) *Module {
 	members := starlark.StringDict{
-		"A":          starlark.MakeInt(sre.FlagASCII),
-		"ASCII":      starlark.MakeInt(sre.FlagASCII),
-		"DEBUG":      starlark.MakeInt(sre.FlagDebug),
-		"I":          starlark.MakeInt(sre.FlagIgnoreCase),
-		"IGNORECASE": starlark.MakeInt(sre.FlagIgnoreCase),
-		"L":          starlark.MakeInt(sre.FlagLocale),
-		"LOCALE":     starlark.MakeInt(sre.FlagLocale),
-		"M":          starlark.MakeInt(sre.FlagMultiline),
-		"MULTILINE":  starlark.MakeInt(sre.FlagMultiline),
+		"A":          makeFlags(sre.FlagASCII),
+		"ASCII":      makeFlags(sre.FlagASCII),
+		"DEBUG":      makeFlags(sre.FlagDebug),
+		"I":          makeFlags(sre.FlagIgnoreCase),
+		"IGNORECASE": makeFlags(sre.FlagIgnoreCase),
+		"L":          makeFlags(sre.FlagLocale),
+		"LOCALE":     makeFlags(sre.FlagLocale),
+		"M":          makeFlags(sre.FlagMultiline),
+		"MULTILINE":  makeFlags(sre.FlagMultiline),
 		"NOFLAG":     zeroInt,
-		"S":          starlark.MakeInt(sre.FlagDotAll),
-		"DOTALL":     starlark.MakeInt(sre.FlagDotAll),
-		"U":          starlark.MakeInt(sre.FlagUnicode),
-		"UNICODE":    starlark.MakeInt(sre.FlagUnicode),
-		"X":          starlark.MakeInt(sre.FlagVerbose),
-		"VERBOSE":    starlark.MakeInt(sre.FlagVerbose),
+		"S":          makeFlags(sre.FlagDotAll),
+		"DOTALL":     makeFlags(sre.FlagDotAll),
+		"U":          makeFlags(sre.FlagUnicode),
+		"UNICODE":    makeFlags(sre.FlagUnicode),
+		"X":          makeFlags(sre.FlagVerbose),
+		"VERBOSE":    makeFlags(sre.FlagVerbose),
 
 		"compile": starlark.NewBuiltin("compile", reCompile),
 		"purge":   starlark.NewBuiltin("purge", rePurge),
@@ -91,7 +91,7 @@ func NewModule(enableFallback bool) *Module {
 	}
 
 	if enableFallback {
-		members["FALLBACK"] = starlark.MakeInt(sre.FlagFallback)
+		members["FALLBACK"] = makeFlags(sre.FlagFallback)
 	}
 
 	r := Module{
@@ -102,6 +102,10 @@ func NewModule(enableFallback bool) *Module {
 	}
 
 	return &r
+}
+
+func makeFlags(flag uint32) starlark.Int {
+	return starlark.MakeUint64(uint64(flag))
 }
 
 // Check, if the type satisfies the interfaces.
@@ -127,13 +131,14 @@ func (m *Module) Attr(name string) (starlark.Value, error) {
 
 	return nil, nil
 }
+
 func (m *Module) AttrNames() []string { return m.members.Keys() }
 
 // compile compiles a regex pattern. If the pattern is already in the cache,
 // the compiled pattern is returned from the cache.
 // Else, the pattern is compiled and then added to the cache.
 // If the cache exceeds a certain size (`maxRegexpCacheSize`), the oldest element is purged from the cache.
-func (m *Module) compile(pattern strOrBytes, flags int) (*Pattern, error) {
+func (m *Module) compile(pattern strOrBytes, flags uint32) (*Pattern, error) {
 	key := cacheKey{
 		pattern.value,
 		pattern.isString,
@@ -185,7 +190,7 @@ func (m *Module) purge() {
 func reCompile(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		pattern patternParam
-		flags   int
+		flags   uint32
 	)
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs, "pattern", &pattern, "flags?", &flags); err != nil {
 		return nil, err
@@ -281,7 +286,7 @@ func reSearch(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwar
 	var (
 		pattern patternParam
 		str     strOrBytes
-		flags   int
+		flags   uint32
 	)
 	if err := starlark.UnpackArgs("search", args, kwargs, "pattern", &pattern, "string", &str, "flags?", &flags); err != nil {
 		return nil, err
@@ -347,7 +352,7 @@ func reMatch(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwarg
 	var (
 		pattern patternParam
 		str     strOrBytes
-		flags   int
+		flags   uint32
 	)
 	if err := starlark.UnpackArgs("match", args, kwargs, "pattern", &pattern, "string", &str, "flags?", &flags); err != nil {
 		return nil, err
@@ -389,7 +394,7 @@ func reFullmatch(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, k
 	var (
 		pattern patternParam
 		str     strOrBytes
-		flags   int
+		flags   uint32
 	)
 	if err := starlark.UnpackArgs("match", args, kwargs, "pattern", &pattern, "string", &str, "flags?", &flags); err != nil {
 		return nil, err
@@ -430,9 +435,10 @@ func regexpFullmatch(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Valu
 // If maxsplit is nonzero, at most maxsplit splits occur, and the remainder of the string is returned as the final element of the list.
 func reSplit(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
-		pattern         patternParam
-		str             strOrBytes
-		maxSplit, flags int
+		pattern  patternParam
+		str      strOrBytes
+		maxSplit int
+		flags    uint32
 	)
 	if err := starlark.UnpackArgs("split", args, kwargs, "pattern", &pattern, "string", &str, "maxsplit?", &maxSplit, "flags?", &flags); err != nil {
 		return nil, err
@@ -465,7 +471,7 @@ func reFindall(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwa
 	var (
 		pattern patternParam
 		str     strOrBytes
-		flags   int
+		flags   uint32
 	)
 	if err := starlark.UnpackArgs("findall", args, kwargs, "pattern", &pattern, "string", &str, "flags?", &flags); err != nil {
 		return nil, err
@@ -533,7 +539,7 @@ func reFinditer(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kw
 	var (
 		pattern patternParam
 		str     strOrBytes
-		flags   int
+		flags   uint32
 	)
 	if err := starlark.UnpackArgs("finditer", args, kwargs, "pattern", &pattern, "string", &str, "flags?", &flags); err != nil {
 		return nil, err
@@ -573,10 +579,11 @@ func regexpFinditer(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Value
 // If the name of the builtin in "subn", the return value is the tuple `(new_string, number_of_subs_made)` instead.
 func reSub(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
-		pattern      patternParam
-		repl         starlark.Value
-		str          strOrBytes
-		count, flags int
+		pattern patternParam
+		repl    starlark.Value
+		str     strOrBytes
+		count   int
+		flags   uint32
 	)
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs, "pattern", &pattern, "repl", &repl, "string", &str, "count?", &count, "flags?", &flags); err != nil {
 		return nil, err
@@ -622,7 +629,7 @@ func reEscape(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwar
 // compilePattern compiles a regex pattern by compiling the pattern using the regex cache.
 // The builtin receiver of the first parameter must be of type `*reModule`.
 // See also `reModule.compile`.
-func compilePattern(b *starlark.Builtin, p patternParam, flags int) (*Pattern, error) {
+func compilePattern(b *starlark.Builtin, p patternParam, flags uint32) (*Pattern, error) {
 	if p.compiled != nil {
 		if flags != 0 {
 			return nil, errors.New("cannot process flags argument with a compiled pattern")
@@ -640,13 +647,13 @@ func compilePattern(b *starlark.Builtin, p patternParam, flags int) (*Pattern, e
 type Pattern struct {
 	re      regexEngine
 	pattern strOrBytes
-	flags   int
+	flags   uint32
 
 	groupDict map[string]int
 }
 
 // newPattern creates a new pattern object, which is also a Starlark value.
-func newPattern(pattern strOrBytes, flags int, fallbackEnabled bool) (*Pattern, error) {
+func newPattern(pattern strOrBytes, flags uint32, fallbackEnabled bool) (*Pattern, error) {
 	p := pattern.value
 	isStr := pattern.isString
 
@@ -742,7 +749,7 @@ func (p *Pattern) writeflags(b *strings.Builder) {
 	first := true
 
 	for i := 0; i < len(flagnames); i++ {
-		f := (1 << i)
+		f := uint32(1) << i
 		if flags&f == 0 {
 			continue
 		}
@@ -789,7 +796,7 @@ var patternMethods = map[string]*starlark.Builtin{
 // TODO: move larger functions to the bottom.
 var patternMembers = map[string]func(p *Pattern) starlark.Value{
 	// Python also determines the flags from the regex string
-	"flags":   func(p *Pattern) starlark.Value { return starlark.MakeInt(p.flags) },
+	"flags":   func(p *Pattern) starlark.Value { return makeFlags(p.flags) },
 	"pattern": func(p *Pattern) starlark.Value { return p.patternValue() },
 	"groups":  func(p *Pattern) starlark.Value { return starlark.MakeInt(p.re.NumSubexp()) },
 	"groupindex": func(p *Pattern) starlark.Value {

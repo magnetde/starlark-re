@@ -73,8 +73,8 @@ type (
 
 	paramSubPattern struct {
 		group    int // -1: no group
-		addFlags int
-		delFlags int
+		addFlags uint32
+		delFlags uint32
 		p        *subPattern
 	}
 )
@@ -261,7 +261,7 @@ func newRepeat(op opcode, min, max int, item *subPattern) *token {
 	}
 }
 
-func newSubPattern(op opcode, group, addFlags, delFlags int, p *subPattern) *token {
+func newSubPattern(op opcode, group int, addFlags, delFlags uint32, p *subPattern) *token {
 	return &token{
 		opcode: op,
 		params: &paramSubPattern{

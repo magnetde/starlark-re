@@ -15,14 +15,14 @@ const (
 )
 
 type state struct {
-	flags            int
+	flags            uint32
 	groupdict        map[string]int
 	groupwidths      []bool
 	lookbehindgroups int
 	grouprefpos      map[int]int
 }
 
-func (s *state) init(flags int) {
+func (s *state) init(flags uint32) {
 	s.flags = flags
 	s.groupdict = make(map[string]int)
 	s.groupwidths = []bool{false}
@@ -75,7 +75,7 @@ func (s *state) checklookbehindgroup(gid int) error {
 
 // preprocess may not be efficient but it is necessary, if ALL syntax error messages should be
 // equal to the Python re module.
-func parse(str string, isStr bool, flags int) (*subPattern, error) {
+func parse(str string, isStr bool, flags uint32) (*subPattern, error) {
 	var state state
 	state.init(flags)
 
@@ -111,7 +111,7 @@ func parse(str string, isStr bool, flags int) (*subPattern, error) {
 	return p, nil
 }
 
-func checkFlags(flags int, isStr bool) (int, error) {
+func checkFlags(flags uint32, isStr bool) (uint32, error) {
 	// check for incompatible flags
 	if isStr {
 		if flags&FlagLocale != 0 {
@@ -492,8 +492,8 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 			capture := true
 			atomic := false
 			name := ""
-			addFlags := 0
-			delFlags := 0
+			addFlags := uint32(0)
+			delFlags := uint32(0)
 
 			if s.match('?') {
 				// options
@@ -949,7 +949,7 @@ func parseIntRune(s string, base int) rune {
 	return rune(r)
 }
 
-func parseFlags(s *source, state *state, char rune) (addFlags int, delFlags int, result bool, err error) {
+func parseFlags(s *source, state *state, char rune) (addFlags, delFlags uint32, result bool, err error) {
 	var ok bool
 
 	if char != '-' {

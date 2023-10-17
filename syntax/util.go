@@ -71,7 +71,7 @@ func isFlag(c rune) bool {
 	}
 }
 
-func getFlag(c rune) int {
+func getFlag(c rune) uint32 {
 	switch c {
 	// standard flags
 	case 'i':
