@@ -394,6 +394,10 @@ func (w *subPatternWriter) writeToken(t *token, ctx *subPatternContext) {
 		w.WriteByte(']')
 	case opLiteral:
 		w.writeLiteral(t.c)
+	case opNotLiteral:
+		w.WriteString("[^")
+		w.writeLiteral(t.c)
+		w.WriteByte(']')
 	case opMinRepeat, opMaxRepeat, opPossessiveRepeat:
 		p := t.params.(*paramRepeat)
 
@@ -437,10 +441,6 @@ func (w *subPatternWriter) writeToken(t *token, ctx *subPatternContext) {
 		case opPossessiveRepeat:
 			w.WriteByte('+')
 		}
-	case opNotLiteral:
-		w.WriteString("[^")
-		w.writeLiteral(t.c)
-		w.WriteByte(']')
 	case opNegate:
 		w.WriteByte('^')
 	case opRange:

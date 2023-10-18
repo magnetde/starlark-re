@@ -19,9 +19,9 @@ func _() {
 	_ = x[opGrouprefExists-8]
 	_ = x[opIn-9]
 	_ = x[opLiteral-10]
-	_ = x[opMinRepeat-11]
-	_ = x[opMaxRepeat-12]
-	_ = x[opNotLiteral-13]
+	_ = x[opNotLiteral-11]
+	_ = x[opMinRepeat-12]
+	_ = x[opMaxRepeat-13]
 	_ = x[opNegate-14]
 	_ = x[opRange-15]
 	_ = x[opSubpattern-16]
@@ -29,9 +29,9 @@ func _() {
 	_ = x[opPossessiveRepeat-18]
 }
 
-const _opcode_name = "FAILUREANYASSERTASSERT_NOTATBRANCHCATEGORYGROUPREFGROUPREF_EXISTSINLITERALMIN_REPEATMAX_REPEATNOT_LITERALNEGATERANGESUBPATTERNATOMIC_GROUPPOSSESSIVE_REPEAT"
+const _opcode_name = "FAILUREANYASSERTASSERT_NOTATBRANCHCATEGORYGROUPREFGROUPREF_EXISTSINLITERALNOT_LITERALMIN_REPEATMAX_REPEATNEGATERANGESUBPATTERNATOMIC_GROUPPOSSESSIVE_REPEAT"
 
-var _opcode_index = [...]uint8{0, 7, 10, 16, 26, 28, 34, 42, 50, 65, 67, 74, 84, 94, 105, 111, 116, 126, 138, 155}
+var _opcode_index = [...]uint8{0, 7, 10, 16, 26, 28, 34, 42, 50, 65, 67, 74, 85, 95, 105, 111, 116, 126, 138, 155}
 
 func (i opcode) String() string {
 	if i >= opcode(len(_opcode_index)-1) {

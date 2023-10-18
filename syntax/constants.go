@@ -47,9 +47,9 @@ const (
 	opGrouprefExists                 // GROUPREF_EXISTS
 	opIn                             // IN
 	opLiteral                        // LITERAL
+	opNotLiteral                     // NOT_LITERAL
 	opMinRepeat                      // MIN_REPEAT
 	opMaxRepeat                      // MAX_REPEAT
-	opNotLiteral                     // NOT_LITERAL
 	opNegate                         // NEGATE
 	opRange                          // RANGE
 	opSubpattern                     // SUBPATTERN

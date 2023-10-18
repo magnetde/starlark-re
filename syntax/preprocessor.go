@@ -215,7 +215,7 @@ func (p *Preprocessor) defaultReplacer(w *subPatternWriter, t *token, ctx *subPa
 			return false
 		}
 
-		hi, okhi := otherCase(p.lo)
+		hi, okhi := otherCase(t.hi)
 		if !okhi {
 			return false
 		}
