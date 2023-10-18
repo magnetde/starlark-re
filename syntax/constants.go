@@ -34,7 +34,7 @@ const (
 type opcode uint32
 
 // Parsable regex operator.
-// Note, than not all of these operators are supported by both regex engines.
+// Note, that not all of these operators are supported by both regex engines.
 const (
 	opFailure          opcode = iota // FAILURE
 	opAny                            // ANY
