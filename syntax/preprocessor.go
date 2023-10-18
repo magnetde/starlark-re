@@ -168,9 +168,9 @@ func (p *Preprocessor) defaultReplacer(w *subPatternWriter, t *token, ctx *subPa
 		}
 
 		// Always inside of character sets.
-		pm := t.params.(paramCategory)
+		category := t.params.(catcode)
 
-		unirange, ok := unicodeRanges[catcode(pm)]
+		unirange, ok := unicodeRanges[category]
 		if !ok {
 			return false
 		}
@@ -197,7 +197,7 @@ func (p *Preprocessor) defaultReplacer(w *subPatternWriter, t *token, ctx *subPa
 		if !ctx.inSet {
 			w.WriteByte('[')
 			w.writeLiteral(t.c)
-			w.WriteRune(o)
+			w.writeLiteral(o)
 			w.WriteByte(']')
 		} else {
 			w.writeLiteral(t.c)
@@ -208,14 +208,14 @@ func (p *Preprocessor) defaultReplacer(w *subPatternWriter, t *token, ctx *subPa
 			return false
 		}
 
-		p := t.params.(*paramRange)
+		p := t.params.(rangeParams)
 
 		lo, oklo := otherCase(p.lo)
 		if !oklo {
 			return false
 		}
 
-		hi, okhi := otherCase(t.hi)
+		hi, okhi := otherCase(p.hi)
 		if !okhi {
 			return false
 		}
@@ -256,10 +256,10 @@ func (p *Preprocessor) FallbackString() (string, map[string]int) {
 		}
 
 		if t.opcode == opSubpattern {
-			p := t.params.(*paramSubPattern)
-
 			// The preprocessor must only write subpatterns differently,
 			// that have a group number.
+
+			p := t.params.(subPatternParam)
 
 			if p.group < 0 {
 				return false
@@ -272,7 +272,7 @@ func (p *Preprocessor) FallbackString() (string, map[string]int) {
 			w.WriteString(g)
 			w.WriteByte('>')
 			if p.p.len() > 0 {
-				w.writePattern(p.p, p)
+				w.writePattern(p.p, &p)
 			}
 			w.WriteByte(')')
 

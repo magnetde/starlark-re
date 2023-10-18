@@ -207,8 +207,8 @@ func parseSub(s *source, state *state, verbose bool, nested int) (*subPattern, e
 		op := t.opcode
 		if op == opLiteral {
 			set = append(set, t)
-		} else if op == opIn && t.items[0].opcode != opNegate {
-			set = append(set, t.items...)
+		} else if op == opIn && t.params.([]*token)[0].opcode != opNegate {
+			set = append(set, t.params.([]*token)...)
 		} else {
 			appendSet = false
 			break
@@ -332,7 +332,8 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 
 					if ch == ']' {
 						if code1.opcode == opIn {
-							code1 = code1.items[0]
+							items := code1.params.([]*token)
+							code1 = items[0]
 						}
 
 						set = append(set, code1, newLiteral('-'))
@@ -348,17 +349,22 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 						code2 = newLiteral(ch)
 					}
 
+					if code1.opcode != opLiteral || code2.opcode != opLiteral {
+						return nil, fmt.Errorf("bad character range %s", s.orig[tmpPos:s.tell()])
+					}
+
 					lo := code1.c
 					hi := code2.c
 
-					if code1.opcode != opLiteral || code2.opcode != opLiteral || hi < lo {
+					if hi < lo {
 						return nil, fmt.Errorf("bad character range %s", s.orig[tmpPos:s.tell()])
 					}
 
 					set = append(set, newRange(opRange, lo, hi))
 				} else {
 					if code1.opcode == opIn {
-						code1 = code1.items[0]
+						items := code1.params.([]*token)
+						code1 = items[0]
 					}
 					set = append(set, code1)
 				}
@@ -464,7 +470,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 
 			var subitem *subPattern
 			if item.opcode == opSubpattern {
-				p := item.params.(*paramSubPattern)
+				p := item.params.(subPatternParam)
 				if p.group == -1 && p.addFlags == 0 && p.delFlags == 0 {
 					subitem = p.p
 				}
@@ -730,7 +736,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 			}
 
 			if atomic {
-				sp.append(newWithSubPattern(opAtomicGroup, p))
+				sp.append(newSubPatternAtomic(opAtomicGroup, p))
 			} else {
 				sp.append(newSubPattern(opSubpattern, group, addFlags, delFlags, p))
 			}
@@ -746,7 +752,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 	for i := sp.len() - 1; i >= 0; i-- {
 		t := sp.get(i)
 		if t.opcode == opSubpattern {
-			p := t.params.(*paramSubPattern)
+			p := t.params.(subPatternParam)
 			if p.group == -1 && p.addFlags == 0 && p.delFlags == 0 {
 				sp.replace(i, p.p)
 			}

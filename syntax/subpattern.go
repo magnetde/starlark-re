@@ -75,25 +75,25 @@ func isUnsupported(t *token) bool {
 		opFailure:
 		return true
 	case opAt:
-		p := t.params.(paramAt)
+		c := t.params.(atcode)
 
-		if atcode(p) == atEndString {
+		if c == atEndString {
 			return true
 		}
 	case opBranch:
-		p := t.params.(*paramSubPatterns)
+		items := t.params.([]*subPattern)
 
-		for _, item := range p.items {
+		for _, item := range items {
 			if item.isUnsupported() {
 				return true
 			}
 		}
 	case opMinRepeat, opMaxRepeat:
-		p := t.params.(*paramRepeat)
+		p := t.params.(repeatParams)
 
 		return p.item.isUnsupported()
 	case opSubpattern:
-		p := t.params.(*paramSubPattern)
+		p := t.params.(subPatternParam)
 
 		return p.p.isUnsupported()
 	}
@@ -122,7 +122,7 @@ func (p *subPattern) dumpPattern(b *strings.Builder, level int) {
 	}
 }
 
-func dumpToken(v *token, b *strings.Builder, level int) {
+func dumpToken(t *token, b *strings.Builder, level int) {
 	printr := func(v ...any) {
 		for i, a := range v {
 			if i > 0 {
@@ -160,19 +160,20 @@ func dumpToken(v *token, b *strings.Builder, level int) {
 		}
 	}
 
-	switch v.opcode {
+	switch t.opcode {
 	case opAssert, opAssertNot:
-		pv := v.params.(*paramAssert)
-		printParams(pv.dir, pv.p)
+		p := t.params.(assertParams)
+		printParams(p.dir, p.p)
 	case opAny:
 		printParams("None")
 	case opAt:
-		pv := v.params.(paramAt)
-		printParams(atcode(pv).String())
+		at := t.params.(atcode)
+		printParams(at.String())
 	case opBranch:
+		items := t.params.([]*subPattern)
+
 		print()
-		pv := v.params.(*paramSubPatterns)
-		for i, a := range pv.items {
+		for i, a := range items {
 			if i != 0 {
 				print(strings.Repeat("  ", level) + "OR")
 			}
@@ -180,62 +181,65 @@ func dumpToken(v *token, b *strings.Builder, level int) {
 		}
 	case opCategory: // tokens of type "CATEGORY" always appear in "IN" tokens
 	case opGroupref:
-		pv := v.params.(paramInt)
-		printParams(pv)
+		group := t.params.(int)
+		printParams(group)
 	case opGrouprefExists:
-		pv := v.params.(*paramGrouprefEx)
-		print("", pv.condgroup)
+		p := t.params.(grouprefExParam)
+		print("", p.condgroup)
 
-		pv.itemYes.dumpPattern(b, level+1)
-		if pv.itemNo != nil {
+		p.itemYes.dumpPattern(b, level+1)
+		if p.itemNo != nil {
 			print(strings.Repeat("  ", level) + "ELSE")
-			pv.itemNo.dumpPattern(b, level+1)
+			p.itemNo.dumpPattern(b, level+1)
 		}
 	case opIn:
-		// member sublanguage
+		items := t.params.([]*token)
 		print()
 
 		// members in items are either of type LITERAL, RANGE or CATEGORY
-		for _, v := range v.items {
+		for _, v := range items {
 			printr(strings.Repeat("  ", level+1) + v.opcode.String() + " ")
 			switch v.opcode {
 			case opLiteral:
 				print(v.c)
 			case opRange:
-				vp := v.params.(*paramRange)
-				print(fmt.Sprintf("(%d, %d)", vp.lo, vp.hi))
+				p := v.params.(rangeParams)
+				print(fmt.Sprintf("(%d, %d)", p.lo, p.hi))
 			case opCategory:
-				vp := v.params.(paramCategory)
-				print(catcode(vp).String())
+				p := v.params.(catcode)
+				print(p.String())
 			}
 		}
 	case opLiteral, opNotLiteral:
-		print("", v.c)
+		print("", t.c)
 	case opMinRepeat, opMaxRepeat, opPossessiveRepeat:
-		pv := v.params.(*paramRepeat)
+		p := t.params.(repeatParams)
+
 		var maxval string
-		if pv.max != maxRepeat {
-			maxval = strconv.Itoa(pv.max)
+		if p.max != maxRepeat {
+			maxval = strconv.Itoa(p.max)
 		} else {
 			maxval = "MAXREPEAT"
 		}
-		printParams(pv.min, maxval, pv.item)
+		printParams(p.min, maxval, p.item)
 	case opRange:
-		pv := v.params.(*paramRange)
-		printParams(pv.lo, pv.hi)
+		p := t.params.(rangeParams)
+		printParams(p.lo, p.hi)
 	case opSubpattern:
-		pv := v.params.(*paramSubPattern)
+		p := t.params.(subPatternParam)
+
 		var group string
-		if pv.group >= 0 {
-			group = strconv.Itoa(pv.group)
+		if p.group >= 0 {
+			group = strconv.Itoa(p.group)
 		} else {
 			group = "None"
 		}
-		printParams(group, pv.addFlags, pv.delFlags, pv.p)
+		printParams(group, p.addFlags, p.delFlags, p.p)
 	case opAtomicGroup:
-		pv := v.params.(*paramSubPatterns)
+		p := t.params.(*subPattern)
+
 		print()
-		pv.items[0].dumpPattern(b, level+1)
+		p.dumpPattern(b, level+1)
 	case opFailure:
 		print()
 	}
@@ -260,10 +264,10 @@ type subPatternWriter struct {
 type subPatternContext struct {
 	hasSiblings bool
 	inSet       bool
-	group       *paramSubPattern
+	group       *subPatternParam
 }
 
-func (w *subPatternWriter) writePattern(p *subPattern, parent *paramSubPattern) {
+func (w *subPatternWriter) writePattern(p *subPattern, parent *subPatternParam) {
 	ctx := subPatternContext{
 		hasSiblings: len(p.data) > 1,
 		inSet:       false,
@@ -288,7 +292,7 @@ func (w *subPatternWriter) writeToken(t *token, ctx *subPatternContext) {
 	case opAny:
 		w.WriteByte('.')
 	case opAssert, opAssertNot:
-		p := t.params.(*paramAssert)
+		p := t.params.(assertParams)
 
 		w.WriteString("(?")
 
@@ -308,9 +312,9 @@ func (w *subPatternWriter) writeToken(t *token, ctx *subPatternContext) {
 		w.writePattern(p.p, ctx.group)
 		w.WriteByte(')')
 	case opAt:
-		p := t.params.(paramAt)
+		at := t.params.(atcode)
 
-		switch atcode(p) {
+		switch at {
 		case atBeginning:
 			w.WriteByte('^')
 		case atBeginningString:
@@ -325,14 +329,14 @@ func (w *subPatternWriter) writeToken(t *token, ctx *subPatternContext) {
 			w.WriteString(`\Z`)
 		}
 	case opBranch:
-		p := t.params.(*paramSubPatterns)
+		items := t.params.([]*subPattern)
 
 		// Always wrap branches branches inside of an non-capture group, if the current
 		// subpattern contains other token, than this branch token.
 		if ctx.hasSiblings {
 			w.WriteString("(?:")
 		}
-		for i, item := range p.items {
+		for i, item := range items {
 			if i > 0 {
 				w.WriteByte('|')
 			}
@@ -343,9 +347,9 @@ func (w *subPatternWriter) writeToken(t *token, ctx *subPatternContext) {
 		}
 	case opCategory:
 		// Always inside of character sets.
-		p := t.params.(paramCategory)
+		category := t.params.(catcode)
 
-		switch catcode(p) {
+		switch category {
 		case categoryDigit:
 			w.WriteString(`\d`)
 		case categoryNotDigit:
@@ -360,12 +364,12 @@ func (w *subPatternWriter) writeToken(t *token, ctx *subPatternContext) {
 			w.WriteString(`\W`)
 		}
 	case opGroupref:
-		p := t.params.(paramInt)
+		group := t.params.(int)
 
 		w.WriteString(`\`)
-		w.writeInt(int(p))
+		w.writeInt(group)
 	case opGrouprefExists:
-		p := t.params.(*paramGrouprefEx)
+		p := t.params.(grouprefExParam)
 
 		w.WriteString("(?(")
 		w.writeInt(p.condgroup)
@@ -381,25 +385,23 @@ func (w *subPatternWriter) writeToken(t *token, ctx *subPatternContext) {
 		// IN tokens are always written as sets, because it is unknown, how the replacer function
 		// rewrites elements inside of the set.
 
+		items := t.params.([]*token)
+
 		newCtx := subPatternContext{
-			hasSiblings: len(t.items) > 1,
+			hasSiblings: len(items) > 1,
 			inSet:       true,
 			group:       ctx.group,
 		}
 
 		w.WriteByte('[')
-		for _, v := range t.items {
+		for _, v := range items {
 			w.writeToken(v, &newCtx)
 		}
 		w.WriteByte(']')
 	case opLiteral:
 		w.writeLiteral(t.c)
-	case opNotLiteral:
-		w.WriteString("[^")
-		w.writeLiteral(t.c)
-		w.WriteByte(']')
 	case opMinRepeat, opMaxRepeat, opPossessiveRepeat:
-		p := t.params.(*paramRepeat)
+		p := t.params.(repeatParams)
 
 		needsGroup := false
 		if p.item.len() > 1 {
@@ -443,14 +445,18 @@ func (w *subPatternWriter) writeToken(t *token, ctx *subPatternContext) {
 		}
 	case opNegate:
 		w.WriteByte('^')
+	case opNotLiteral:
+		w.WriteString("[^")
+		w.writeLiteral(t.c)
+		w.WriteByte(']')
 	case opRange:
-		p := t.params.(*paramRange)
+		p := t.params.(rangeParams)
 
 		w.writeLiteral(p.lo)
 		w.WriteByte('-')
 		w.writeLiteral(p.hi)
 	case opSubpattern:
-		p := t.params.(*paramSubPattern)
+		p := t.params.(subPatternParam)
 
 		w.WriteByte('(')
 
@@ -484,15 +490,15 @@ func (w *subPatternWriter) writeToken(t *token, ctx *subPatternContext) {
 		}
 
 		if p.p.len() > 0 {
-			w.writePattern(p.p, p)
+			w.writePattern(p.p, &p)
 		}
 
 		w.WriteByte(')')
 	case opAtomicGroup:
-		p := t.params.(*paramSubPatterns)
+		p := t.params.(*subPattern)
 
 		w.WriteString("(?>")
-		w.writePattern(p.items[0], ctx.group)
+		w.writePattern(p, ctx.group)
 		w.WriteByte(')')
 	case opFailure:
 		w.WriteString("(?!)")
