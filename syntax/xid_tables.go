@@ -1,10 +1,13 @@
 package syntax
 
+// tableRange represents a range of Unicode codepoints.
 type tableRange struct {
 	lo rune
 	hi rune
 }
 
+// xidStartTable contains ranges of Unicode codepoints that may present the start of an identifier.
+// See also https://unicode.org/reports/tr31/ (XID_START).
 var xidStartTable = [...]tableRange{
 	{'\x41', '\x5a'},
 	{'\x61', '\x7a'},
@@ -674,6 +677,9 @@ var xidStartTable = [...]tableRange{
 	{'\U00031350', '\U000323af'},
 }
 
+// xidContinueTable contains ranges of Unicode codepoints that may present the continuation of an identifier.
+// "xidContinueTable" is a superset of "xidStartTable".
+// See also https://unicode.org/reports/tr31/ (XID_Continue).
 var xidContinueTable = [...]tableRange{
 	{'\x30', '\x39'},
 	{'\x41', '\x5a'},

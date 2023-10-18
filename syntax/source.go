@@ -97,7 +97,7 @@ func (s *source) nextInt() (int, bool, error) {
 		}
 
 		prev = i
-		i = 10*i + digitByte(s.cur[0])
+		i = 10*i + toDigitByte(s.cur[0])
 		if i < prev {
 			return 0, false, errors.New("overflow error")
 		}

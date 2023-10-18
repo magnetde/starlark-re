@@ -19,8 +19,8 @@ func (t *TemplateRule) IsLiteral() bool {
 }
 
 type Subexp interface {
+	SubexpCount() int
 	SubexpIndex(name string) int
-	NumSubexp() int
 }
 
 func ParseTemplate(s Subexp, template string, isString bool) ([]TemplateRule, error) {
@@ -42,7 +42,7 @@ func ParseTemplate(s Subexp, template string, isString bool) ([]TemplateRule, er
 	}
 
 	addIndex := func(i int) error {
-		if i > s.NumSubexp() {
+		if i > s.SubexpCount() {
 			return fmt.Errorf("invalid group reference %d", i)
 		}
 
@@ -85,10 +85,10 @@ func ParseTemplate(s Subexp, template string, isString bool) ([]TemplateRule, er
 			chr := 0
 
 			if len(template) > 0 && isOctDigitByte(template[0]) {
-				chr = digitByte(template[0])
+				chr = toDigitByte(template[0])
 
 				if len(template) > 1 && isOctDigitByte(template[1]) {
-					chr = 8*chr + digitByte(template[1])
+					chr = 8*chr + toDigitByte(template[1])
 					template = template[2:]
 				} else {
 					template = template[1:]
@@ -97,13 +97,13 @@ func ParseTemplate(s Subexp, template string, isString bool) ([]TemplateRule, er
 
 			addLiteral(string(rune(chr)))
 		case '1', '2', '3', '4', '5', '6', '7', '8', '9': // index or octal string
-			index := digitByte(c)
+			index := toDigitByte(c)
 
 			if len(template) > 0 && isDigitByte(template[0]) {
 				if isOctDigitByte(c) && isOctDigitByte(template[0]) &&
 					len(template) > 1 && isOctDigitByte(template[1]) {
 
-					index = 8*(8*index+digitByte(template[0])) + digitByte(template[1])
+					index = 8*(8*index+toDigitByte(template[0])) + toDigitByte(template[1])
 					if index > 0o377 {
 						return nil, fmt.Errorf(`octal escape value \%s outside of range 0-0o377`, string(c)+template[:2])
 					}
@@ -114,7 +114,7 @@ func ParseTemplate(s Subexp, template string, isString bool) ([]TemplateRule, er
 					break // break out of case
 				}
 
-				index = 10*index + digitByte(template[0])
+				index = 10*index + toDigitByte(template[0])
 				template = template[1:]
 			}
 
@@ -122,17 +122,29 @@ func ParseTemplate(s Subexp, template string, isString bool) ([]TemplateRule, er
 			if err != nil {
 				return nil, err
 			}
+		case 'a':
+			addLiteral("\a")
+		case 'b':
+			addLiteral("\b")
+		case 'f':
+			addLiteral("\f")
+		case 'n':
+			addLiteral("\n")
+		case 'r':
+			addLiteral("\r")
+		case 't':
+			addLiteral("\t")
+		case 'v':
+			addLiteral("\v")
+		case '\\':
+			addLiteral("\\")
 		default:
-			if escape, ok := unescapeLetter(c); ok {
-				addLiteral(escape)
-			} else {
-				if isASCIILetterByte(c) {
-					return nil, fmt.Errorf("bad escape \\%c", c)
-				}
-
-				addLiteral(`\`)
-				addLiteral(string(c))
+			if isASCIILetterByte(c) {
+				return nil, fmt.Errorf("bad escape \\%c", c)
 			}
+
+			addLiteral(`\`)
+			addLiteral(string(c))
 		}
 	}
 
@@ -160,7 +172,7 @@ func extractGroup(s Subexp, template string, isString bool) (index int, rest str
 	}
 
 	if uindex, e := strconv.ParseUint(name, 10, 32); e != nil {
-		err = checkgroupname(name, isString)
+		err = checkGroupName(name, isString)
 		if err != nil {
 			return
 		}

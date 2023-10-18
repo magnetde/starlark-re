@@ -1,7 +1,9 @@
 package syntax
 
-// See https://github.com/justinmeza/lci/blob/main/unicode.c
-
+// unicodeNames is a sorted list of unicode names.
+// The i-th name in "unicodeNames" corrensponds to the i-th character in "unicodeCodepoints".
+// The character of a unicode names is determined with the function "lookupUnicodeName".
+// See also https://github.com/justinmeza/lci/blob/main/unicode.c
 var unicodeNames = [...]string{
 	"AC CURRENT",
 	"ACCOUNT OF",
@@ -21752,6 +21754,7 @@ var unicodeNames = [...]string{
 	"ZERO WIDTH SPACE",
 }
 
+// See the description of "unicodeNames".
 var unicodeCodepoints = [...]rune{
 	0x23E6,
 	0x2100,

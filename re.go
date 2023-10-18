@@ -798,7 +798,7 @@ var patternMembers = map[string]func(p *Pattern) starlark.Value{
 	// Python also determines the flags from the regex string
 	"flags":   func(p *Pattern) starlark.Value { return makeFlags(p.flags) },
 	"pattern": func(p *Pattern) starlark.Value { return p.patternValue() },
-	"groups":  func(p *Pattern) starlark.Value { return starlark.MakeInt(p.re.NumSubexp()) },
+	"groups":  func(p *Pattern) starlark.Value { return starlark.MakeInt(p.re.SubexpCount()) },
 	"groupindex": func(p *Pattern) starlark.Value {
 		names := p.re.SubexpNames()
 
@@ -994,7 +994,7 @@ func (g *group) empty() bool {
 
 // newMatch creates a new match object.
 func newMatch(p *Pattern, str strOrBytes, a []int, pos, endpos int) *Match {
-	n := 1 + p.re.NumSubexp()
+	n := 1 + p.re.SubexpCount()
 
 	lastIndex := -1
 	lastIndexEnd := -1

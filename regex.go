@@ -15,9 +15,11 @@ import (
 	"github.com/magnetde/starlark-re/util"
 )
 
+// Needs to have exported fields, because engine has to share common methods
+// with interface `Subexp` in package `syntax`.
 type regexEngine interface {
 	SubexpNames() []string
-	NumSubexp() int
+	SubexpCount() int
 	SubexpIndex(name string) int
 	SupportsLongest() bool          // support for the longest match function
 	BuildInput(s string) regexInput // Fix invalid codepoints
@@ -168,7 +170,7 @@ func (r *stdRegex) SubexpNames() []string {
 	return r.re.SubexpNames()
 }
 
-func (r *stdRegex) NumSubexp() int {
+func (r *stdRegex) SubexpCount() int {
 	return r.re.NumSubexp()
 }
 
@@ -261,7 +263,7 @@ func (i *stdInput) pad(a []int) []int {
 		return nil
 	}
 
-	n := (1 + i.re.NumSubexp()) * 2
+	n := (1 + i.re.SubexpCount()) * 2
 	for len(a) < n {
 		a = append(a, -1)
 	}
@@ -290,7 +292,7 @@ func (r *fallbEngine) SubexpNames() []string {
 	return names
 }
 
-func (r *fallbEngine) NumSubexp() int {
+func (r *fallbEngine) SubexpCount() int {
 	return r.numSubexp
 }
 

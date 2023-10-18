@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	typeFlags   = FlagASCII | FlagLocale | FlagUnicode
-	globalFlags = FlagDebug
+	typeFlags   = FlagASCII | FlagLocale | FlagUnicode // exclude flags in subpatterns
+	globalFlags = FlagDebug                            // flags, that may only appear on global flags
 )
 
 type state struct {
@@ -512,7 +512,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 							return nil, err
 						}
 
-						err = checkgroupname(name, s.isStr)
+						err = checkGroupName(name, s.isStr)
 						if err != nil {
 							return nil, err
 						}
@@ -523,7 +523,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 							return nil, err
 						}
 
-						err = checkgroupname(name, s.isStr)
+						err = checkGroupName(name, s.isStr)
 						if err != nil {
 							return nil, err
 						}
@@ -622,7 +622,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 					}
 
 					if ugroup, e := strconv.ParseUint(condname, 10, 32); e != nil {
-						err = checkgroupname(condname, s.isStr)
+						err = checkGroupName(condname, s.isStr)
 						if err != nil {
 							return nil, err
 						}
@@ -832,7 +832,7 @@ func parseEscape(s *source, state *state, inCls bool) (*token, error) {
 	case '1', '2', '3', '4', '5', '6', '7', '8', '9':
 		// octal escape *or* decimal group reference (only if not in class)
 
-		value := digit(c)
+		value := toDigit(c)
 
 		if !inCls {
 			if c1, ok := s.peek(); ok && isDigit(c1) {
@@ -842,7 +842,7 @@ func parseEscape(s *source, state *state, inCls bool) (*token, error) {
 					if c2, ok := s.peek(); ok && isOctDigit(c2) {
 						s.read()
 
-						value = 8*(8*value+digit(c1)) + digit(c2)
+						value = 8*(8*value+toDigit(c1)) + toDigit(c2)
 						if value > 0o377 {
 							return nil, fmt.Errorf(`octal escape value \%c%c%c outside of range 0-0o377`, c, c1, c2)
 						}
@@ -851,7 +851,7 @@ func parseEscape(s *source, state *state, inCls bool) (*token, error) {
 					}
 				}
 
-				value = 10*value + digit(c1)
+				value = 10*value + toDigit(c1)
 			}
 
 			// not an octal escape, so this is a group reference
