@@ -279,7 +279,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 				continue
 			}
 			if c == '#' {
-				s.skipUntil("\n")
+				s.skipUntil('\n')
 				continue
 			}
 		}
@@ -390,7 +390,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 
 		case '*', '+', '?', '{':
 			// repeat previous item
-			here := s.str()
+			here := s.tell()
 
 			var min, max int
 			switch c {
@@ -426,7 +426,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 
 				if !s.match('}') {
 					sp.append(newLiteral(c))
-					s.restore(here)
+					s.seek(here)
 					continue
 				}
 

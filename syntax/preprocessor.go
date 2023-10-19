@@ -189,7 +189,7 @@ func (p *Preprocessor) defaultReplacer(w *subPatternWriter, t *regexNode, ctx *s
 			return false
 		}
 
-		o, ok := otherCase(t.c)
+		o, ok := otherASCIICase(t.c)
 		if !ok {
 			return false
 		}
@@ -210,12 +210,12 @@ func (p *Preprocessor) defaultReplacer(w *subPatternWriter, t *regexNode, ctx *s
 
 		p := t.params.(rangeParams)
 
-		lo, oklo := otherCase(p.lo)
+		lo, oklo := otherASCIICase(p.lo)
 		if !oklo {
 			return false
 		}
 
-		hi, okhi := otherCase(p.hi)
+		hi, okhi := otherASCIICase(p.hi)
 		if !okhi {
 			return false
 		}
@@ -233,7 +233,7 @@ func (p *Preprocessor) defaultReplacer(w *subPatternWriter, t *regexNode, ctx *s
 
 // returns the character with the opposite case of `c`.
 // Must only be called for ASCII chars.
-func otherCase(c rune) (rune, bool) {
+func otherASCIICase(c rune) (rune, bool) {
 	if c > unicode.MaxASCII {
 		return 0, false
 	}
