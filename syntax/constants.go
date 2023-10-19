@@ -35,6 +35,29 @@ type opcode uint32
 
 // Parsable regex operator.
 // Note, that not all of these operators are supported by both regex engines.
+// The following operators exists (ordered by opcode value):
+//
+//   - FAILURE: empty negative lookups; `(?!)`
+//   - ANY: matches any character; `.`
+//   - ASSERT: positive lookahead or lookbehind; `(?=...)` or `(?<=...)`
+//   - ASSERT_NOT: negative lookahead or lookbehind; `(?!...)` or `(?<!...)`
+//   - AT: positional matches; `^`, `\A`, `\b`, `\B`, `$`, `\Z`
+//   - BRANCH: list of subpatterns separated by `|`
+//   - CATEGORY: character class;  `\d`, `\D`, `\s`, `\S`, `\w`, `\W`
+//   - GROUPREF: backreference to another subgroup; `\1`
+//   - GROUPREF_EXISTS: conditional expression; `(?(...)...|...)`
+//   - IN: set of characters; `[...]` or an character class
+//   - LITERAL: literal
+//   - MIN_REPEAT: non-greedy match; `??`, `*?`, `+?`, `{...}?`
+//   - MAX_REPEAT: greedy match; `?`, `*`, `+`, `{...}`
+//   - NEGATE: negate character; `^`
+//   - NOT_LITERAL: single negated literal; `[^...]`
+//   - RANGE: character range; `...-...`
+//   - SUBPATTERN:
+//     subpattern, either as capture group or non-capturing with optional flags;
+//     `(?P<...>...)`, `(?...:...)`
+//   - ATOMIC_GROUP: possessive match; `(?>...)`
+//   - POSSESSIVE_REPEAT: possesive repeat; `?+`, `*+`, `++`, `{...}+`
 const (
 	opFailure          opcode = iota // FAILURE
 	opAny                            // ANY
@@ -47,10 +70,10 @@ const (
 	opGrouprefExists                 // GROUPREF_EXISTS
 	opIn                             // IN
 	opLiteral                        // LITERAL
-	opNotLiteral                     // NOT_LITERAL
 	opMinRepeat                      // MIN_REPEAT
 	opMaxRepeat                      // MAX_REPEAT
 	opNegate                         // NEGATE
+	opNotLiteral                     // NOT_LITERAL
 	opRange                          // RANGE
 	opSubpattern                     // SUBPATTERN
 	opAtomicGroup                    // ATOMIC_GROUP

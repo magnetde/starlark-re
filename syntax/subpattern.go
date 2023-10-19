@@ -10,7 +10,7 @@ import (
 
 type subPattern struct {
 	state *state
-	data  []*token
+	data  []*regexNode
 }
 
 func newSubpattern(state *state) *subPattern {
@@ -19,7 +19,7 @@ func newSubpattern(state *state) *subPattern {
 	}
 }
 
-func (p *subPattern) append(t *token) {
+func (p *subPattern) append(t *regexNode) {
 	p.data = append(p.data, t)
 }
 
@@ -27,7 +27,7 @@ func (p *subPattern) len() int {
 	return len(p.data)
 }
 
-func (p *subPattern) get(i int) *token {
+func (p *subPattern) get(i int) *regexNode {
 	i = p.index(i)
 	return p.data[i]
 }
@@ -44,7 +44,7 @@ func (p *subPattern) del(i int) {
 	p.data = slices.Delete(p.data, i, i+1)
 }
 
-func (p *subPattern) set(i int, t *token) {
+func (p *subPattern) set(i int, t *regexNode) {
 	i = p.index(i)
 	p.data[i] = t
 }
@@ -66,7 +66,7 @@ func (p *subPattern) isUnsupported() bool {
 	return false
 }
 
-func isUnsupported(t *token) bool {
+func isUnsupported(t *regexNode) bool {
 	switch t.opcode {
 	case opAssert, opAssertNot,
 		opGroupref, opGrouprefExists,
@@ -118,11 +118,11 @@ func (p *subPattern) dumpPattern(b *strings.Builder, level int) {
 
 		b.WriteString(strings.Repeat("  ", level))
 		b.WriteString(op.String())
-		dumpToken(v, b, level)
+		dumpNode(v, b, level)
 	}
 }
 
-func dumpToken(t *token, b *strings.Builder, level int) {
+func dumpNode(t *regexNode, b *strings.Builder, level int) {
 	printr := func(v ...any) {
 		for i, a := range v {
 			if i > 0 {
@@ -179,7 +179,7 @@ func dumpToken(t *token, b *strings.Builder, level int) {
 			}
 			a.dumpPattern(b, level+1)
 		}
-	case opCategory: // tokens of type "CATEGORY" always appear in "IN" tokens
+	case opCategory: // nodes of type "CATEGORY" always appear in "IN" nodes
 	case opGroupref:
 		group := t.params.(int)
 		printParams(group)
@@ -193,7 +193,7 @@ func dumpToken(t *token, b *strings.Builder, level int) {
 			p.itemNo.dumpPattern(b, level+1)
 		}
 	case opIn:
-		items := t.params.([]*token)
+		items := t.params.([]*regexNode)
 		print()
 
 		// members in items are either of type LITERAL, RANGE or CATEGORY
@@ -245,7 +245,7 @@ func dumpToken(t *token, b *strings.Builder, level int) {
 	}
 }
 
-func (p *subPattern) string(isStr bool, replace func(w *subPatternWriter, t *token, ctx *subPatternContext) bool) string {
+func (p *subPattern) string(isStr bool, replace func(w *subPatternWriter, t *regexNode, ctx *subPatternContext) bool) string {
 	w := subPatternWriter{
 		isStr:   isStr,
 		replace: replace,
@@ -258,7 +258,7 @@ func (p *subPattern) string(isStr bool, replace func(w *subPatternWriter, t *tok
 type subPatternWriter struct {
 	strings.Builder
 	isStr   bool
-	replace func(w *subPatternWriter, t *token, ctx *subPatternContext) bool
+	replace func(w *subPatternWriter, t *regexNode, ctx *subPatternContext) bool
 }
 
 type subPatternContext struct {
@@ -275,15 +275,15 @@ func (w *subPatternWriter) writePattern(p *subPattern, parent *subPatternParam) 
 	}
 
 	for _, item := range p.data {
-		w.writeToken(item, &ctx)
+		w.writeNode(item, &ctx)
 	}
 }
 
 // Flags supported by the Go regex library.
 const supportedFlags = FlagIgnoreCase | FlagMultiline | FlagDotAll
 
-// `inSet` can only be true, of called from `IN` token.
-func (w *subPatternWriter) writeToken(t *token, ctx *subPatternContext) {
+// `inSet` can only be true, of called from `IN` node.
+func (w *subPatternWriter) writeNode(t *regexNode, ctx *subPatternContext) {
 	if w.replace(w, t, ctx) {
 		return
 	}
@@ -298,12 +298,8 @@ func (w *subPatternWriter) writeToken(t *token, ctx *subPatternContext) {
 
 		if p.dir < 0 {
 			w.WriteByte('<')
-			if t.opcode == opAssert {
-				w.WriteByte('=')
-			} else {
-				w.WriteByte('!')
-			}
-		} else if t.opcode == opAssert {
+		}
+		if t.opcode == opAssert {
 			w.WriteByte('=')
 		} else {
 			w.WriteByte('!')
@@ -332,7 +328,7 @@ func (w *subPatternWriter) writeToken(t *token, ctx *subPatternContext) {
 		items := t.params.([]*subPattern)
 
 		// Always wrap branches branches inside of an non-capture group, if the current
-		// subpattern contains other token, than this branch token.
+		// subpattern contains other node, than this branch node.
 		if ctx.hasSiblings {
 			w.WriteString("(?:")
 		}
@@ -382,10 +378,10 @@ func (w *subPatternWriter) writeToken(t *token, ctx *subPatternContext) {
 		w.WriteByte(')')
 	case opIn:
 		// Members in items are either of type LITERAL, RANGE or CATEGORY.
-		// IN tokens are always written as sets, because it is unknown, how the replacer function
+		// IN nodes are always written as sets, because it is unknown, how the replacer function
 		// rewrites elements inside of the set.
 
-		items := t.params.([]*token)
+		items := t.params.([]*regexNode)
 
 		newCtx := subPatternContext{
 			hasSiblings: len(items) > 1,
@@ -395,7 +391,7 @@ func (w *subPatternWriter) writeToken(t *token, ctx *subPatternContext) {
 
 		w.WriteByte('[')
 		for _, v := range items {
-			w.writeToken(v, &newCtx)
+			w.writeNode(v, &newCtx)
 		}
 		w.WriteByte(']')
 	case opLiteral:

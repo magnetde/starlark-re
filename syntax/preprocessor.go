@@ -128,7 +128,7 @@ func buildRange(s string) []rune {
 // If UNICODE is enabled, the sets \d, \D, \s, ... are replaced with an unicode counterpart.
 // If IGNORECASE and ASCII is enabled, every literal and range of ASCII characters is replaced with a character set,
 // that contains all characters, that match all cases of this character.
-func (p *Preprocessor) defaultReplacer(w *subPatternWriter, t *token, ctx *subPatternContext) bool {
+func (p *Preprocessor) defaultReplacer(w *subPatternWriter, t *regexNode, ctx *subPatternContext) bool {
 	if !p.isStr {
 		return false
 	}
@@ -250,7 +250,7 @@ func (p *Preprocessor) FallbackString() (string, map[string]int) {
 	groupMapping := make(map[string]int)
 
 	var b strings.Builder
-	b.WriteString(p.p.string(p.isStr, func(w *subPatternWriter, t *token, ctx *subPatternContext) bool {
+	b.WriteString(p.p.string(p.isStr, func(w *subPatternWriter, t *regexNode, ctx *subPatternContext) bool {
 		if p.defaultReplacer(w, t, ctx) {
 			return true
 		}

@@ -164,7 +164,7 @@ func parseSub(s *source, state *state, verbose bool, nested int) (*subPattern, e
 
 	// check if all items share a common prefix
 	for {
-		var prefix *token
+		var prefix *regexNode
 		hasPrefix := true
 
 		for _, item := range items {
@@ -197,7 +197,7 @@ func parseSub(s *source, state *state, verbose bool, nested int) (*subPattern, e
 	appendSet := true
 
 	// check if the branch can be replaced by a character set
-	var set []*token
+	var set []*regexNode
 	for _, item := range items {
 		if item.len() != 1 {
 			appendSet = false
@@ -207,8 +207,8 @@ func parseSub(s *source, state *state, verbose bool, nested int) (*subPattern, e
 		op := t.opcode
 		if op == opLiteral {
 			set = append(set, t)
-		} else if op == opIn && t.params.([]*token)[0].opcode != opNegate {
-			set = append(set, t.params.([]*token)...)
+		} else if op == opIn && t.params.([]*regexNode)[0].opcode != opNegate {
+			set = append(set, t.params.([]*regexNode)...)
 		} else {
 			appendSet = false
 			break
@@ -218,16 +218,16 @@ func parseSub(s *source, state *state, verbose bool, nested int) (*subPattern, e
 	if appendSet {
 		// we can store this as a character set instead of a
 		// branch (the compiler may optimize this even more)
-		sp.append(newItemsToken(opIn, unique(set)))
+		sp.append(newItemsNode(opIn, unique(set)))
 	} else {
-		sp.append(newSubPatternsToken(opBranch, items))
+		sp.append(newSubPatternsNode(opBranch, items))
 	}
 
 	return sp, nil
 }
 
-func unique(items []*token) []*token {
-	m := make(map[opcode][]*token)
+func unique(items []*regexNode) []*regexNode {
+	m := make(map[opcode][]*regexNode)
 
 	for _, t := range items {
 		if l, ok := m[t.opcode]; ok {
@@ -243,11 +243,11 @@ func unique(items []*token) []*token {
 				m[t.opcode] = append(l, t)
 			}
 		} else {
-			m[t.opcode] = []*token{t}
+			m[t.opcode] = []*regexNode{t}
 		}
 	}
 
-	var newItems []*token
+	var newItems []*regexNode
 	for _, l := range m {
 		newItems = append(newItems, l...)
 	}
@@ -289,17 +289,17 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 			sp.append(newLiteral(c))
 		// ')', '|' already handled
 		case '\\':
-			token, err := parseEscape(s, state, false /* not class */)
+			node, err := parseEscape(s, state, false /* not class */)
 			if err != nil {
 				return nil, err
 			}
 
-			sp.append(token)
+			sp.append(node)
 		case '[':
 			negate := s.match('^')
 
 			// character set
-			var set []*token
+			var set []*regexNode
 
 			// check remaining characters
 			for {
@@ -310,7 +310,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 					return nil, errors.New("unterminated character set")
 				}
 
-				var code1, code2 *token
+				var code1, code2 *regexNode
 
 				if c == ']' && len(set) > 0 {
 					break
@@ -332,7 +332,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 
 					if ch == ']' {
 						if code1.opcode == opIn {
-							items := code1.params.([]*token)
+							items := code1.params.([]*regexNode)
 							code1 = items[0]
 						}
 
@@ -360,10 +360,10 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 						return nil, fmt.Errorf("bad character range %s", s.orig[tmpPos:s.tell()])
 					}
 
-					set = append(set, newRange(opRange, lo, hi))
+					set = append(set, newRangeNode(opRange, lo, hi))
 				} else {
 					if code1.opcode == opIn {
-						items := code1.params.([]*token)
+						items := code1.params.([]*regexNode)
 						code1 = items[0]
 					}
 					set = append(set, code1)
@@ -374,18 +374,18 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 
 			if len(set) == 1 && set[0].opcode == opLiteral {
 				if negate {
-					sp.append(newCharToken(opNotLiteral, set[0].c))
+					sp.append(newCharNode(opNotLiteral, set[0].c))
 				} else {
 					sp.append(set[0])
 				}
 			} else {
 				if negate {
-					set = slices.Insert(set, 0, newEmptyToken(opNegate))
+					set = slices.Insert(set, 0, newEmptyNode(opNegate))
 				}
 
 				// charmap optimization can't be added here because
 				// global flags still are not known
-				sp.append(newItemsToken(opIn, set))
+				sp.append(newItemsNode(opIn, set))
 			}
 
 		case '*', '+', '?', '{':
@@ -457,7 +457,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 			}
 
 			// figure out which item to repeat
-			var item *token
+			var item *regexNode
 			if sp.len() > 0 {
 				item = sp.get(-1)
 			}
@@ -482,17 +482,17 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 
 			if s.match('?') {
 				// Non-Greedy Match
-				sp.set(-1, newRepeat(opMinRepeat, min, max, subitem))
+				sp.set(-1, newRepeatNode(opMinRepeat, min, max, subitem))
 			} else if s.match('+') {
 				// Possessive Match (Always Greedy)
-				sp.set(-1, newRepeat(opPossessiveRepeat, min, max, subitem))
+				sp.set(-1, newRepeatNode(opPossessiveRepeat, min, max, subitem))
 			} else {
 				// Greedy Match
-				sp.set(-1, newRepeat(opMaxRepeat, min, max, subitem))
+				sp.set(-1, newRepeatNode(opMaxRepeat, min, max, subitem))
 			}
 
 		case '.':
-			sp.append(newEmptyToken(opAny))
+			sp.append(newEmptyNode(opAny))
 
 		case '(':
 			capture := true
@@ -547,7 +547,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 							return nil, err
 						}
 
-						sp.append(newGrouprefToken(opGroupref, gid))
+						sp.append(newGrouprefNode(opGroupref, gid))
 						continue
 
 					} else {
@@ -611,11 +611,11 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 					}
 
 					if char == '=' {
-						sp.append(newAssertToken(opAssert, dir, p))
+						sp.append(newAssertNode(opAssert, dir, p))
 					} else if p.len() > 0 {
-						sp.append(newAssertToken(opAssertNot, dir, p))
+						sp.append(newAssertNode(opAssertNot, dir, p))
 					} else {
-						sp.append(newEmptyToken(opFailure))
+						sp.append(newEmptyNode(opFailure))
 					}
 
 					continue
@@ -679,7 +679,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 						return nil, errors.New("missing ), unterminated subpattern")
 					}
 
-					sp.append(newGrouprefExistsToken(opGrouprefExists, condgroup, itemYes, itemNo))
+					sp.append(newGrouprefExistsNode(opGrouprefExists, condgroup, itemYes, itemNo))
 					continue
 
 				case '>':
@@ -736,15 +736,15 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 			}
 
 			if atomic {
-				sp.append(newSubPatternAtomic(opAtomicGroup, p))
+				sp.append(newAtomicGroupNode(opAtomicGroup, p))
 			} else {
-				sp.append(newSubPattern(opSubpattern, group, addFlags, delFlags, p))
+				sp.append(newSubPatternNode(opSubpattern, group, addFlags, delFlags, p))
 			}
 
 		case '^':
-			sp.append(newAtToken(opAt, atBeginning))
+			sp.append(newAtNode(opAt, atBeginning))
 		case '$':
-			sp.append(newAtToken(opAt, atEnd))
+			sp.append(newAtNode(opAt, atEnd))
 		}
 	}
 
@@ -762,7 +762,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 	return sp, nil
 }
 
-func parseEscape(s *source, state *state, inCls bool) (*token, error) {
+func parseEscape(s *source, state *state, inCls bool) (*regexNode, error) {
 	// handle escape code in expression
 
 	c, ok := s.read()
@@ -872,7 +872,7 @@ func parseEscape(s *source, state *state, inCls bool) (*token, error) {
 					return nil, err
 				}
 
-				return newGrouprefToken(opGroupref, group), nil
+				return newGrouprefNode(opGroupref, group), nil
 			}
 
 			return nil, fmt.Errorf("invalid group reference %d", value)
@@ -898,7 +898,7 @@ func parseEscape(s *source, state *state, inCls bool) (*token, error) {
 		if inCls {
 			return newLiteral('\b'), nil
 		} else {
-			return newAtToken(opAt, atBoundary), nil
+			return newAtNode(opAt, atBoundary), nil
 		}
 	case 'f':
 		return newLiteral('\f'), nil
@@ -917,28 +917,28 @@ func parseEscape(s *source, state *state, inCls bool) (*token, error) {
 	case 'A':
 		// start of string
 		if !inCls {
-			return newAtToken(opAt, atBeginningString), nil
+			return newAtNode(opAt, atBeginningString), nil
 		}
 	case 'B':
 		if !inCls {
-			return newAtToken(opAt, atNonBoundary), nil
+			return newAtNode(opAt, atNonBoundary), nil
 		}
 	case 'd':
-		return newItemsToken(opIn, []*token{newCategoryToken(opCategory, categoryDigit)}), nil
+		return newItemsNode(opIn, []*regexNode{newCategoryNode(opCategory, categoryDigit)}), nil
 	case 'D':
-		return newItemsToken(opIn, []*token{newCategoryToken(opCategory, categoryNotDigit)}), nil
+		return newItemsNode(opIn, []*regexNode{newCategoryNode(opCategory, categoryNotDigit)}), nil
 	case 's':
-		return newItemsToken(opIn, []*token{newCategoryToken(opCategory, categorySpace)}), nil
+		return newItemsNode(opIn, []*regexNode{newCategoryNode(opCategory, categorySpace)}), nil
 	case 'S':
-		return newItemsToken(opIn, []*token{newCategoryToken(opCategory, categoryNotSpace)}), nil
+		return newItemsNode(opIn, []*regexNode{newCategoryNode(opCategory, categoryNotSpace)}), nil
 	case 'w':
-		return newItemsToken(opIn, []*token{newCategoryToken(opCategory, categoryWord)}), nil
+		return newItemsNode(opIn, []*regexNode{newCategoryNode(opCategory, categoryWord)}), nil
 	case 'W':
-		return newItemsToken(opIn, []*token{newCategoryToken(opCategory, categoryNotWord)}), nil
+		return newItemsNode(opIn, []*regexNode{newCategoryNode(opCategory, categoryNotWord)}), nil
 	case 'Z':
 		// end of string
 		if !inCls {
-			return newAtToken(opAt, atEndString), nil
+			return newAtNode(opAt, atEndString), nil
 		}
 	default:
 		if !isASCIILetter(c) {
