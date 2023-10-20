@@ -21,7 +21,15 @@ func IsASCIIString(s string) bool {
 	return true
 }
 
-func QuoteString(s string, isString bool, bprefix bool) string {
+func QuoteString(s string, isString bool) string {
+	return quoteString(s, isString, true, false)
+}
+
+func QuoteASCII(s string, isString bool) string {
+	return quoteString(s, isString, true, true)
+}
+
+func quoteString(s string, isString bool, bprefix bool, ascii bool) string {
 	var b strings.Builder
 	b.Grow(len(s) + 3)
 

@@ -366,6 +366,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 						items := code1.params.([]*regexNode)
 						code1 = items[0]
 					}
+
 					set = append(set, code1)
 				}
 			}
@@ -373,6 +374,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 			set = unique(set)
 
 			if len(set) == 1 && set[0].opcode == opLiteral {
+				// optimization
 				if negate {
 					sp.append(newCharNode(opNotLiteral, set[0].c))
 				} else {
@@ -574,6 +576,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 					}
 
 					continue
+
 				case '=', '!', '<':
 					// lookahead assertions
 					dir := 1

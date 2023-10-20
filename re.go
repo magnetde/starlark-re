@@ -706,7 +706,7 @@ func (p *Pattern) patternValue() starlark.String { return starlark.String(p.patt
 func (p *Pattern) String() string {
 	s := p.pattern
 
-	r := util.QuoteString(s.value, s.isString, true)
+	r := util.QuoteString(s.value, s.isString)
 	if len(r) > 200 {
 		r = r[:200]
 	}
@@ -1049,7 +1049,7 @@ var (
 func (m *Match) String() string { // TODO
 	g := m.groups[0]
 	return fmt.Sprintf("<re.match object; span=(%d, %d), match=%s>",
-		g.start, g.end, util.QuoteString(g.str, m.str.isString, true),
+		g.start, g.end, util.QuoteString(g.str, m.str.isString),
 	)
 }
 
