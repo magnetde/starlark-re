@@ -170,7 +170,7 @@ func (s *source) nextFunc(n int, fn func(r byte) bool) string {
 // It ensures that group names in string patterns are valid unicode identifiers,
 // and that group names in byte patterns are only made from ASCII characters.
 func (s *source) checkGroupName(name string, offset int) error {
-	if !(s.isStr || util.IsASCIIString(name)) {
+	if !(s.isStr || isASCIIString(name)) {
 		return s.erroro("bad character in group name "+util.ASCII(name, s.isStr), len(name)+offset)
 	}
 	if !isIdentifier(name) {

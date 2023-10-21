@@ -2,8 +2,8 @@ package regex
 
 import "math"
 
+// Generate string representations of constants.
 // To install stringer: go install golang.org/x/tools/cmd/stringer@latest
-//
 //go:generate stringer -type=opcode,atcode,catcode -linecomment -output=constants_string.go
 
 // Possible flags for the flag parameter.

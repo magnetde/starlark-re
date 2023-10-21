@@ -94,41 +94,26 @@ func (p *preprocessor) stdPattern() string {
 		b.WriteByte(')')
 	}
 
-	b.WriteString(p.p.string(p.isStr, p.defaultReplacer))
+	b.WriteString(p.p.string(p.isStr, func(w *subPatternWriter, t *regexNode, ctx *subPatternContext) bool {
+		return p.defaultReplacer(w, t, ctx, true)
+	}))
 
 	return b.String()
 }
 
-var unicodeRanges = map[catcode][]rune{
-	categoryDigit:    buildRange(`[\p{Nd}]`),
-	categoryNotDigit: buildRange(`[^\p{Nd}]`),
-	categorySpace:    buildRange(`[\p{Z}\v]`),
-	categoryNotSpace: buildRange(`[^\p{Z}\v]`),
-	categoryWord:     buildRange(`[\p{L}\p{N}_]`),
-	categoryNotWord:  buildRange(`[^\p{L}\p{N}_]`),
-}
-
-// While it is simple to include the negated character class of `\d` in a character set (by using \P{Nd}),
-// it is not trivial to include the negated character range of `\p{Z}\v`, since it is not possible to exclude
-// one of the sets `\p{Z}` AND `\v` at the same time. So, ranges must be included which contain ALL characters
-// which do not exist in `\p{Z}\v`.
-func buildRange(s string) []rune {
-	re, err := syntax.Parse(s, syntax.Perl)
-	if err != nil {
-		panic(err)
-	}
-
-	if re.Op != syntax.OpCharClass {
-		panic(fmt.Errorf("expected regex syntax type %s, got %s", syntax.OpCharClass, re.Op))
-	}
-
-	return re.Rune
+var unicodeRanges = map[catcode]string{
+	categoryDigit:    `[\p{Nd}]`,
+	categoryNotDigit: `[^\p{Nd}]`,
+	categorySpace:    `[\p{Z}\v]`,
+	categoryNotSpace: `[^\p{Z}\v]`,
+	categoryWord:     `[\p{L}\p{N}_]`,
+	categoryNotWord:  `[^\p{L}\p{N}_]`,
 }
 
 // If UNICODE is enabled, the sets \d, \D, \s, ... are replaced with an unicode counterpart.
 // If IGNORECASE and ASCII is enabled, every literal and range of ASCII characters is replaced with a character set,
 // that contains all characters, that match all cases of this character.
-func (p *preprocessor) defaultReplacer(w *subPatternWriter, t *regexNode, ctx *subPatternContext) bool {
+func (p *preprocessor) defaultReplacer(w *subPatternWriter, t *regexNode, ctx *subPatternContext, std bool) bool {
 	if !p.isStr {
 		return false
 	}
@@ -170,8 +155,35 @@ func (p *preprocessor) defaultReplacer(w *subPatternWriter, t *regexNode, ctx *s
 		// Always inside of character sets.
 		category := t.params.(catcode)
 
-		unirange, ok := unicodeRanges[category]
-		if !ok {
+		// Chrck, if the short unicode character sets can be added to the regex.
+		// The shorter unicode classes are only supported by the standard regex engine,
+		// and they can only be used, if the current category does not negate the set or if the current
+		// category is the only element in the character set.
+
+		if std {
+			// Handle a complicated program flow with an switch statement with break and fallthrough.
+			switch category {
+			case categoryNotDigit, categoryNotSpace, categoryNotWord:
+				if ctx.hasSiblings {
+					break
+				}
+
+				fallthrough
+			default:
+				if r, ok := unicodeRanges[category]; ok {
+					r = strings.TrimSuffix(strings.TrimPrefix(r, "["), "]") // remove the character set chars
+					w.WriteString(r)                                        // write the character set
+					return true
+				}
+			}
+		}
+
+		// While it is simple to include the negated character class of `\d` in a character set (by using \P{Nd}),
+		// it is not trivial to include the negated character range of `\p{Z}\v`, since it is not possible to exclude
+		// one of the sets `\p{Z}` AND `\v` at the same time. So, ranges must be included which contain ALL characters
+		// which do not exist in `\p{Z}\v`.
+		unirange, err := buildRange(category)
+		if err != nil {
 			return false
 		}
 
@@ -231,6 +243,24 @@ func (p *preprocessor) defaultReplacer(w *subPatternWriter, t *regexNode, ctx *s
 	return false
 }
 
+func buildRange(c catcode) ([]rune, error) {
+	r, ok := unicodeRanges[c]
+	if ok {
+		return nil, fmt.Errorf("unknown category %d", c)
+	}
+
+	re, err := syntax.Parse(r, syntax.Perl)
+	if err != nil {
+		return nil, err
+	}
+
+	if re.Op != syntax.OpCharClass {
+		return nil, fmt.Errorf("expected regex syntax type %s, got %s", syntax.OpCharClass, re.Op)
+	}
+
+	return re.Rune, nil
+}
+
 // returns the character with the opposite case of `c`.
 // Must only be called for ASCII chars.
 func otherASCIICase(c rune) (rune, bool) {
@@ -251,7 +281,7 @@ func (p *preprocessor) fallbackPattern() (string, map[string]int) {
 
 	var b strings.Builder
 	b.WriteString(p.p.string(p.isStr, func(w *subPatternWriter, t *regexNode, ctx *subPatternContext) bool {
-		if p.defaultReplacer(w, t, ctx) {
+		if p.defaultReplacer(w, t, ctx, false) {
 			return true
 		}
 

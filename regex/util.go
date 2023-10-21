@@ -3,9 +3,20 @@ package regex
 import (
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/magnetde/starlark-re/util"
 )
+
+// isASCIIString checks, if the string only contains ASCII characters.
+func isASCIIString(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] > unicode.MaxASCII {
+			return false
+		}
+	}
+	return true
+}
 
 // isASCIILetter checks if a given character is an ASCII letter.
 func isASCIILetter(b rune) bool {

@@ -454,7 +454,7 @@ func (w *subPatternWriter) writeNode(t *regexNode, ctx *subPatternContext) {
 		w.WriteByte('(')
 
 		if p.group >= 0 {
-			groupName := groupname(p.p, p.group)
+			groupName := groupName(p.p, p.group)
 			if groupName != "" {
 				w.WriteString("?P<")
 				w.WriteString(groupName)
@@ -498,7 +498,7 @@ func (w *subPatternWriter) writeNode(t *regexNode, ctx *subPatternContext) {
 	}
 }
 
-func groupname(p *subPattern, gid int) string {
+func groupName(p *subPattern, gid int) string {
 	for name, g := range p.state.groupdict {
 		if gid == g {
 			return name

@@ -12,16 +12,6 @@ var (
 	hexChars      = "0123456789abcdef"
 )
 
-// IsASCIIString checks, if the string only contains ASCII characters.
-func IsASCIIString(s string) bool {
-	for i := 0; i < len(s); i++ {
-		if s[i] > unicode.MaxASCII {
-			return false
-		}
-	}
-	return true
-}
-
 // Repr returns a representation of the string.
 // The parameter `isString` controls, whether the string should be interpreted as a string or a bytes object.
 func Repr(s string, isString bool) string {

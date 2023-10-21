@@ -10,8 +10,6 @@ import (
 	"unsafe"
 
 	"github.com/dlclark/regexp2"
-
-	"github.com/magnetde/starlark-re/util"
 )
 
 // Needs to have exported fields, because engine has to share common methods
@@ -335,7 +333,7 @@ func (r *fallbEngine) BuildInput(s string) Input {
 }
 
 func getRuneOffsets(s string) ([]rune, []int, []int) {
-	if util.IsASCIIString(s) { // if the string has only ASCII characters, offsets are not necessary
+	if isASCIIString(s) { // if the string has only ASCII characters, offsets are not necessary
 		return []rune(s), nil, nil
 	}
 

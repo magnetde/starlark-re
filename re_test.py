@@ -6,6 +6,7 @@
 
 
 # Add dummy assignments to fix Python warnings.
+# type: ignore
 re = re
 same = same
 measure = measure
