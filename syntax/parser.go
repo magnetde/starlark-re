@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
-	"strings"
 	"unicode/utf8"
+
+	"github.com/magnetde/starlark-re/util"
 )
 
 const (
@@ -14,36 +15,43 @@ const (
 	globalFlags = FlagDebug                            // flags, that may only appear on global flags
 )
 
+// state represents the current parser state.
+// It contains global flags, a mapping of group names to group indices, a list of open / closed groups,
+// a number of valid look behind groups and a mapping of groups to its positions in the pattern.
 type state struct {
 	flags            uint32
 	groupdict        map[string]int
-	groupwidths      []bool
+	groupsclosed     []bool
 	lookbehindgroups int
 	grouprefpos      map[int]int
 }
 
+// init initializes the parser state.
 func (s *state) init(flags uint32) {
 	s.flags = flags
 	s.groupdict = make(map[string]int)
-	s.groupwidths = []bool{false}
+	s.groupsclosed = []bool{false}
 	s.lookbehindgroups = -1
 	s.grouprefpos = make(map[int]int)
 }
 
+// group returns the current number of groups.
 func (s *state) groups() int {
-	return len(s.groupwidths)
+	return len(s.groupsclosed)
 }
 
-func (s *state) opengroup(name string) (int, error) {
+// openGroup openes a new group. If the group has no name, the name value may be empty.
+// If the group name already exists or the number of groups exceeds the limit, an error is returned.
+func (s *state) openGroup(name string) (int, error) {
 	gid := s.groups()
-	s.groupwidths = append(s.groupwidths, false)
+	s.groupsclosed = append(s.groupsclosed, false)
 	if s.groups() > maxGroups {
 		return 0, errors.New("too many groups")
 	}
 	if name != "" {
 		ogid, ok := s.groupdict[name]
 		if ok {
-			return 0, fmt.Errorf("redefinition of group name '%s' as group %d; was group %d", name, gid, ogid)
+			return 0, fmt.Errorf("redefinition of group name %s as group %d; was group %d", util.Repr(name, true), gid, ogid)
 		}
 
 		s.groupdict[name] = gid
@@ -52,35 +60,40 @@ func (s *state) opengroup(name string) (int, error) {
 	return gid, nil
 }
 
-func (s *state) closegroup(gid int) {
-	s.groupwidths[gid] = true
+// closeGroup marks the specific group as closed.
+func (s *state) closeGroup(gid int) {
+	s.groupsclosed[gid] = true
 }
 
-func (s *state) checkgroup(gid int) bool {
-	return gid < s.groups() && s.groupwidths[gid]
+// checkGroup returns true, if the specific group exists and is closed.
+func (s *state) checkGroup(gid int) bool {
+	return gid < s.groups() && s.groupsclosed[gid]
 }
 
-func (s *state) checklookbehindgroup(gid int) error {
+// checkLookbehindGroup checks, if the specific group is valid for a lookbehind.
+// If not, an error is returned.
+func (s *state) checkLookbehindGroup(gid int, src *source) error {
 	if s.lookbehindgroups != -1 {
-		if !s.checkgroup(gid) {
-			return errors.New("cannot refer to an open group")
+		if !s.checkGroup(gid) {
+			return src.errorh("cannot refer to an open group")
 		}
 		if gid >= s.lookbehindgroups {
-			return errors.New("cannot refer to group defined in the same lookbehind subpattern")
+			return src.errorh("cannot refer to group defined in the same lookbehind subpattern")
 		}
 	}
 
 	return nil
 }
 
-// preprocess may not be efficient but it is necessary, if ALL syntax error messages should be
-// equal to the Python re module.
+// Parse parses a regex pattern into a subpattern object.
+// The parser is a Go implementation of the parser used in the Python "re" module.
+// All errors fully correspond to the errors of the Python parser.
 func parse(str string, isStr bool, flags uint32) (*subPattern, error) {
-	var state state
-	state.init(flags)
-
 	var s source
 	s.init(str, isStr)
+
+	var state state
+	state.init(flags)
 
 	p, err := parseSub(&s, &state, flags&FlagVerbose != 0, 0)
 	if err != nil {
@@ -95,22 +108,19 @@ func parse(str string, isStr bool, flags uint32) (*subPattern, error) {
 	p.state.flags = f
 
 	if _, ok := s.peek(); ok {
-		return nil, errors.New("unbalanced parenthesis")
+		return nil, s.errorh("unbalanced parenthesis")
 	}
 
 	for g := range p.state.grouprefpos {
 		if g >= p.state.groups() {
-			return nil, fmt.Errorf("invalid group reference %d", g)
+			return nil, s.errorp(fmt.Sprintf("invalid group reference %d", g), p.state.grouprefpos[g])
 		}
-	}
-
-	if flags&FlagDebug != 0 {
-		p.dump(nil) // TODO: call later
 	}
 
 	return p, nil
 }
 
+// checkFlags checks, if the global flags are valid.
 func checkFlags(flags uint32, isStr bool) (uint32, error) {
 	// check for incompatible flags
 	if isStr {
@@ -134,6 +144,12 @@ func checkFlags(flags uint32, isStr bool) (uint32, error) {
 	return flags, nil
 }
 
+// parseSub parses a regex alternation and is the main function to parse a regex string.
+// If the alternation contains only one element, it is returned instead a subpattern, that contains the alternation.
+// Also, the alternation is simplified by extracting a common prefix and by replacing subpatterns with character sets,
+// if possible.
+// If the alternation contains multiple subpatterns, that are either single literals or character classes, the alternation
+// is converted to a character set.
 func parseSub(s *source, state *state, verbose bool, nested int) (*subPattern, error) {
 	// parse an alternation: a|b|c
 
@@ -226,35 +242,8 @@ func parseSub(s *source, state *state, verbose bool, nested int) (*subPattern, e
 	return sp, nil
 }
 
-func unique(items []*regexNode) []*regexNode {
-	m := make(map[opcode][]*regexNode)
-
-	for _, t := range items {
-		if l, ok := m[t.opcode]; ok {
-			add := true
-			for _, i := range l {
-				if i.equals(t) {
-					add = false
-					break
-				}
-			}
-
-			if add {
-				m[t.opcode] = append(l, t)
-			}
-		} else {
-			m[t.opcode] = []*regexNode{t}
-		}
-	}
-
-	var newItems []*regexNode
-	for _, l := range m {
-		newItems = append(newItems, l...)
-	}
-
-	return newItems
-}
-
+// parseInternal parses a subpattern.
+// See the comment at the enum of opcodes for a list of possible subpatterns.
 func parseInternal(s *source, state *state, verbose bool, nested int, first bool) (*subPattern, error) {
 	// parse a simple pattern
 
@@ -267,8 +256,8 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 			break // end of pattern
 		}
 
-		if c == '|' || c == ')' { // end of subpattern
-			break
+		if c == '|' || c == ')' {
+			break // end of subpattern
 		}
 
 		s.read()
@@ -289,25 +278,27 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 			sp.append(newLiteral(c))
 		// ')', '|' already handled
 		case '\\':
-			node, err := parseEscape(s, state, false /* not class */)
+			code, err := parseEscape(s, state, false /* not class */)
 			if err != nil {
 				return nil, err
 			}
 
-			sp.append(node)
+			sp.append(code)
+
 		case '[':
-			negate := s.match('^')
+			here := s.tell() - 1
 
 			// character set
 			var set []*regexNode
+			negate := s.match('^')
 
 			// check remaining characters
 			for {
-				tmpPos := s.tell() // determine the current position; necessary for the err message
+				start := s.tell() // determine the current position; necessary for the err message
 
 				c, ok = s.read()
 				if !ok {
-					return nil, errors.New("unterminated character set")
+					return nil, s.errorp("unterminated character set", here)
 				}
 
 				var code1, code2 *regexNode
@@ -327,7 +318,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 					// potential range
 					ch, ok := s.read()
 					if !ok {
-						return nil, errors.New("unterminated character set")
+						return nil, s.errorp("unterminated character set", here)
 					}
 
 					if ch == ']' {
@@ -350,14 +341,14 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 					}
 
 					if code1.opcode != opLiteral || code2.opcode != opLiteral {
-						return nil, fmt.Errorf("bad character range %s", s.orig[tmpPos:s.tell()])
+						return nil, s.errorp(fmt.Sprintf("bad character range %s", s.orig[start:s.tell()]), start)
 					}
 
 					lo := code1.c
 					hi := code2.c
 
 					if hi < lo {
-						return nil, fmt.Errorf("bad character range %s", s.orig[tmpPos:s.tell()])
+						return nil, s.errorp(fmt.Sprintf("bad character range %s", s.orig[start:s.tell()]), start)
 					}
 
 					set = append(set, newRangeNode(opRange, lo, hi))
@@ -449,7 +440,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 						return nil, errors.New("the repetition number is too large")
 					}
 					if max < min {
-						return nil, errors.New("min repeat greater than max repeat")
+						return nil, s.errorp("min repeat greater than max repeat", here)
 					}
 				} else {
 					max = maxRepeat
@@ -464,10 +455,10 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 				item = sp.get(-1)
 			}
 			if item == nil || item.opcode == opAt {
-				return nil, errors.New("nothing to repeat")
+				return nil, s.errorp("nothing to repeat", here-1)
 			}
 			if isRepeatCode(item.opcode) {
-				return nil, errors.New("multiple repeat")
+				return nil, s.errorp("multiple repeat", here-1)
 			}
 
 			var subitem *subPattern
@@ -497,6 +488,8 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 			sp.append(newEmptyNode(opAny))
 
 		case '(':
+			start := s.tell() - 1
+
 			capture := true
 			atomic := false
 			name := ""
@@ -507,7 +500,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 				// options
 				char, ok := s.read()
 				if !ok {
-					return nil, errors.New("unexpected end of pattern")
+					return nil, s.errorh("unexpected end of pattern")
 				}
 
 				switch char {
@@ -520,7 +513,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 							return nil, err
 						}
 
-						err = checkGroupName(name, s.isStr)
+						err = s.checkGroupName(name, 1)
 						if err != nil {
 							return nil, err
 						}
@@ -531,20 +524,20 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 							return nil, err
 						}
 
-						err = checkGroupName(name, s.isStr)
+						err = s.checkGroupName(name, 1)
 						if err != nil {
 							return nil, err
 						}
 
 						gid, ok := state.groupdict[name]
 						if !ok {
-							return nil, fmt.Errorf("unknown group name '%s'", name)
+							return nil, s.erroro(fmt.Sprintf("unknown group name %s", util.Repr(name, true)), len(name)+1)
 						}
-						if !state.checkgroup(gid) {
-							return nil, errors.New("cannot refer to an open group")
+						if !state.checkGroup(gid) {
+							return nil, s.erroro("cannot refer to an open group", len(name)+1)
 						}
 
-						err = state.checklookbehindgroup(gid)
+						err = state.checkLookbehindGroup(gid, s)
 						if err != nil {
 							return nil, err
 						}
@@ -555,10 +548,10 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 					} else {
 						char, ok = s.read()
 						if !ok {
-							return nil, errors.New("unexpected end of pattern")
+							return nil, s.errorh("unexpected end of pattern")
 						}
 
-						return nil, fmt.Errorf("unknown extension ?P%c", char)
+						return nil, s.erroro(fmt.Sprintf("unknown extension ?P%c", char), s.clen(char)+2)
 					}
 				case ':':
 					// non-capturing group
@@ -567,7 +560,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 					// comment
 					for {
 						if _, ok = s.peek(); !ok {
-							return nil, errors.New("missing ), unterminated comment")
+							return nil, s.errorp("missing ), unterminated comment", start)
 						}
 
 						if ch, ok := s.read(); ok && ch == ')' {
@@ -585,10 +578,10 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 					if char == '<' {
 						char, ok = s.read()
 						if !ok {
-							return nil, errors.New("unexpected end of pattern")
+							return nil, s.errorh("unexpected end of pattern")
 						}
-						if !strings.ContainsRune("=!", char) {
-							return nil, fmt.Errorf("unknown extension ?<%c", char)
+						if char != '=' && char != '!' {
+							return nil, s.erroro(fmt.Sprintf("unknown extension ?<%c", char), s.clen(char)+2)
 						}
 
 						dir = -1 // lookbehind
@@ -610,7 +603,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 					}
 
 					if !s.match(')') {
-						return nil, errors.New("missing ), unterminated subpattern")
+						return nil, s.errorp("missing ), unterminated subpattern", start)
 					}
 
 					if char == '=' {
@@ -622,30 +615,31 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 					}
 
 					continue
+
 				case '(':
 					// conditional backreference group
-					var condgroup int
 					condname, err := s.getUntil(')', "group name")
 					if err != nil {
 						return nil, err
 					}
 
+					var condgroup int
 					if ugroup, e := strconv.ParseUint(condname, 10, 32); e != nil {
-						err = checkGroupName(condname, s.isStr)
+						err = s.checkGroupName(condname, 1)
 						if err != nil {
 							return nil, err
 						}
 
 						condgroup, ok = state.groupdict[condname]
 						if !ok {
-							return nil, fmt.Errorf("unknown group name '%s'", condname)
+							return nil, s.erroro(fmt.Sprintf("unknown group name %s", util.Repr(condname, true)), len(condname)+1)
 						}
 					} else {
 						if ugroup == 0 {
-							return nil, errors.New("bad group number")
+							return nil, s.erroro("bad group number", len(condname)+1)
 						}
 						if ugroup >= maxGroups {
-							return nil, fmt.Errorf("invalid group reference %d", condgroup)
+							return nil, s.erroro(fmt.Sprintf("invalid group reference %d", condgroup), len(condname)+1)
 						}
 
 						condgroup = int(ugroup)
@@ -655,7 +649,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 						}
 					}
 
-					err = state.checklookbehindgroup(condgroup)
+					err = state.checkLookbehindGroup(condgroup, s)
 					if err != nil {
 						return nil, err
 					}
@@ -674,12 +668,12 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 						}
 
 						if next, ok := s.peek(); ok && next == '|' {
-							return nil, errors.New("conditional backref with more than two branches")
+							return nil, s.errorh("conditional backref with more than two branches")
 						}
 					}
 
 					if !s.match(')') {
-						return nil, errors.New("missing ), unterminated subpattern")
+						return nil, s.errorp("missing ), unterminated subpattern", start)
 					}
 
 					sp.append(newGrouprefExistsNode(opGrouprefExists, condgroup, itemYes, itemNo))
@@ -699,7 +693,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 
 						if !ok { // global flags
 							if !first || sp.len() > 0 {
-								return nil, errors.New("global flags not at the start of the expression")
+								return nil, s.errorp("global flags not at the start of the expression", start)
 							}
 
 							verbose = state.flags&FlagVerbose != 0
@@ -708,7 +702,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 
 						capture = false
 					} else {
-						return nil, fmt.Errorf("unknown extension ?%c", char)
+						return nil, s.erroro(fmt.Sprintf("unknown extension ?%c", char), s.clen(char)+1)
 					}
 				}
 			}
@@ -717,13 +711,13 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 
 			group := -1
 			if capture {
-				group, err = state.opengroup(name)
+				group, err = state.openGroup(name)
 				if err != nil {
-					return nil, err
+					return nil, s.erroro(err.Error(), len(name)+1)
 				}
 			}
 
-			subVerbose := ((verbose || (addFlags&FlagVerbose != 0)) && !(delFlags&FlagVerbose != 0))
+			subVerbose := (verbose || (addFlags&FlagVerbose != 0)) && !(delFlags&FlagVerbose != 0)
 
 			p, err := parseSub(s, state, subVerbose, nested+1)
 			if err != nil {
@@ -731,11 +725,11 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 			}
 
 			if !s.match(')') {
-				return nil, errors.New("missing ), unterminated subpattern")
+				return nil, s.errorp("missing ), unterminated subpattern", start)
 			}
 
 			if group != -1 {
-				state.closegroup(group)
+				state.closeGroup(group)
 			}
 
 			if atomic {
@@ -765,12 +759,15 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 	return sp, nil
 }
 
+// parseEscape parses an escape sequence.
+// This function is only called if the last character was a backslash.
+// Result regex nodes are from type LITERAL, GROUPREF, AT or IN.
 func parseEscape(s *source, state *state, inCls bool) (*regexNode, error) {
 	// handle escape code in expression
 
 	c, ok := s.read()
 	if !ok {
-		return nil, errors.New("bad escape (end of pattern)")
+		return nil, s.erroro("bad escape (end of pattern)", 1)
 	}
 
 	switch c {
@@ -779,7 +776,7 @@ func parseEscape(s *source, state *state, inCls bool) (*regexNode, error) {
 
 		e := s.nextHex(2)
 		if len(e) != 2 {
-			return nil, fmt.Errorf(`incomplete escape \%c%s`, c, e)
+			return nil, s.erroro(fmt.Sprintf(`incomplete escape \%c%s`, c, e), len(e)+2)
 		}
 
 		return newLiteral(parseIntRune(e, 16)), nil
@@ -788,7 +785,7 @@ func parseEscape(s *source, state *state, inCls bool) (*regexNode, error) {
 		// U: unicode escape (exactly eight digits)
 
 		if !s.isStr { // u and U escapes only allowed for strings
-			return nil, fmt.Errorf(`bad escape \%c`, c)
+			return nil, s.erroro(fmt.Sprintf(`bad escape \%c`, c), 2)
 		}
 
 		var size int
@@ -800,12 +797,12 @@ func parseEscape(s *source, state *state, inCls bool) (*regexNode, error) {
 
 		e := s.nextHex(size)
 		if len(e) != size {
-			return nil, fmt.Errorf(`incomplete escape \%c%s`, c, e)
+			return nil, s.erroro(fmt.Sprintf(`incomplete escape \%c%s`, c, e), len(e)+2)
 		}
 
 		r := parseIntRune(e, 16)
 		if c == 'U' && utf8.RuneLen(r) < 0 {
-			return nil, fmt.Errorf(`bad escape \%c%s`, c, e)
+			return nil, s.erroro(fmt.Sprintf(`bad escape \%c%s`, c, e), len(e)+2)
 		}
 
 		return newLiteral(parseIntRune(e, 16)), nil
@@ -813,11 +810,11 @@ func parseEscape(s *source, state *state, inCls bool) (*regexNode, error) {
 		// named unicode escape e.g. \N{EM DASH}
 
 		if !s.isStr {
-			return nil, errors.New(`bad escape \N`)
+			return nil, s.erroro(`bad escape \N`, 2)
 		}
 
 		if !s.match('{') {
-			return nil, errors.New("missing {")
+			return nil, s.errorh("missing {")
 		}
 
 		name, err := s.getUntil('}', "character name")
@@ -827,7 +824,7 @@ func parseEscape(s *source, state *state, inCls bool) (*regexNode, error) {
 
 		r, ok := lookupUnicodeName(name)
 		if !ok {
-			return nil, fmt.Errorf("undefined character name '%s'", name)
+			return nil, s.erroro(fmt.Sprintf("undefined character name %s", util.Repr(name, true)), len(name)+len(`\N{}`))
 		}
 
 		return newLiteral(r), nil
@@ -841,6 +838,8 @@ func parseEscape(s *source, state *state, inCls bool) (*regexNode, error) {
 	case '1', '2', '3', '4', '5', '6', '7', '8', '9':
 		// octal escape *or* decimal group reference (only if not in class)
 
+		start := s.tell() - 2 // save the start of the escape
+
 		value := toDigit(c)
 
 		if !inCls {
@@ -853,7 +852,7 @@ func parseEscape(s *source, state *state, inCls bool) (*regexNode, error) {
 
 						value = 8*(8*value+toDigit(c1)) + toDigit(c2)
 						if value > 0o377 {
-							return nil, fmt.Errorf(`octal escape value \%c%c%c outside of range 0-0o377`, c, c1, c2)
+							return nil, s.errorp(fmt.Sprintf(`octal escape value \%c%c%c outside of range 0-0o377`, c, c1, c2), start)
 						}
 
 						return newLiteral(rune(value)), nil
@@ -866,11 +865,11 @@ func parseEscape(s *source, state *state, inCls bool) (*regexNode, error) {
 			// not an octal escape, so this is a group reference
 			group := value
 			if group < state.groups() {
-				if !state.checkgroup(group) {
-					return nil, errors.New("cannot refer to an open group")
+				if !state.checkGroup(group) {
+					return nil, s.errorp("cannot refer to an open group", start)
 				}
 
-				err := state.checklookbehindgroup(group)
+				err := state.checkLookbehindGroup(group, s)
 				if err != nil {
 					return nil, err
 				}
@@ -878,18 +877,18 @@ func parseEscape(s *source, state *state, inCls bool) (*regexNode, error) {
 				return newGrouprefNode(opGroupref, group), nil
 			}
 
-			return nil, fmt.Errorf("invalid group reference %d", value)
+			return nil, s.errorp(fmt.Sprintf("invalid group reference %d", value), start+1)
 		}
 
 		if c >= '8' {
-			return nil, fmt.Errorf(`bad escape \%c`, c)
+			return nil, s.errorp(fmt.Sprintf(`bad escape \%c`, c), start)
 		}
 
 		e := s.nextOct(2)
 
 		r := rune((1<<(3*len(e)))*value) + parseIntRune(e, 8) // 8 * value if len(e) == 1 else 64 * value
 		if r > 0o377 {
-			return nil, fmt.Errorf(`octal escape value \%c%s outside of range 0-0o377`, c, e)
+			return nil, s.errorp(fmt.Sprintf(`octal escape value \%c%s outside of range 0-0o377`, c, e), start)
 		}
 
 		return newLiteral(r), nil
@@ -898,11 +897,11 @@ func parseEscape(s *source, state *state, inCls bool) (*regexNode, error) {
 	case 'a':
 		return newLiteral('\a'), nil
 	case 'b':
-		if inCls {
-			return newLiteral('\b'), nil
-		} else {
+		if !inCls {
 			return newAtNode(opAt, atBoundary), nil
 		}
+
+		return newLiteral('\b'), nil
 	case 'f':
 		return newLiteral('\f'), nil
 	case 'n':
@@ -949,15 +948,19 @@ func parseEscape(s *source, state *state, inCls bool) (*regexNode, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("bad escape %c", c)
+	return nil, s.erroro(fmt.Sprintf(`bad escape \%c`, c), 2)
 }
 
-// assertion: string is valid and does not overflow int
+// parseIntRune parses a string representation of a number in the given base and returns the corresponding rune value.
+// It is assumed, that the string is valid for the base and does not overflow the uint32 type.
 func parseIntRune(s string, base int) rune {
 	r, _ := strconv.ParseUint(s, base, 32)
 	return rune(r)
 }
 
+// parseeFlags parses the regex flags in an group.
+// If no flags exist, the return value of "result" is false.
+// An error is returned, if incompatible or unknown flags where found.
 func parseFlags(s *source, state *state, char rune) (addFlags, delFlags uint32, result bool, err error) {
 	var ok bool
 
@@ -965,12 +968,12 @@ func parseFlags(s *source, state *state, char rune) (addFlags, delFlags uint32, 
 		for {
 			if s.isStr {
 				if char == 'L' {
-					err = errors.New("bad inline flags: cannot use 'L' flag with a str pattern")
+					err = s.errorh("bad inline flags: cannot use 'L' flag with a str pattern")
 					return
 				}
 			} else {
 				if char == 'u' {
-					err = errors.New("bad inline flags: cannot use 'u' flag with a bytes pattern")
+					err = s.errorh("bad inline flags: cannot use 'u' flag with a bytes pattern")
 					return
 				}
 			}
@@ -979,27 +982,27 @@ func parseFlags(s *source, state *state, char rune) (addFlags, delFlags uint32, 
 
 			addFlags |= flag
 			if (flag&typeFlags != 0) && (addFlags&typeFlags) != flag {
-				err = errors.New("bad inline flags: flags 'a', 'u' and 'L' are incompatible")
+				err = s.errorh("bad inline flags: flags 'a', 'u' and 'L' are incompatible")
 				return
 			}
 
 			char, ok = s.read()
 			if !ok {
-				err = errors.New("missing -, : or )")
+				err = s.errorh("missing -, : or )")
 				return
 			}
 
-			if strings.ContainsRune(")-:", char) {
+			if char == ')' || char == '-' || char == ':' {
 				break
 			}
 
 			if !isFlag(char) {
 				if isASCIILetter(char) {
-					err = errors.New("unknown flag")
+					err = s.erroro("unknown flag", s.clen(char))
 					return
 				}
 
-				err = errors.New("missing -, : or )")
+				err = s.erroro("missing -, : or )", s.clen(char))
 				return
 			}
 		}
@@ -1011,31 +1014,31 @@ func parseFlags(s *source, state *state, char rune) (addFlags, delFlags uint32, 
 	}
 
 	if addFlags&globalFlags != 0 {
-		err = errors.New("bad inline flags: cannot turn on global flag")
+		err = s.erroro("bad inline flags: cannot turn on global flag", 1)
 		return
 	}
 
 	if char == '-' {
 		char, ok = s.read()
 		if !ok {
-			err = errors.New("missing flag")
+			err = s.errorh("missing flag")
 			return
 		}
 
 		if !isFlag(char) {
 			if isASCIILetter(char) {
-				err = errors.New("unknown flag")
+				err = s.erroro("unknown flag", s.clen(char))
 				return
 			}
 
-			err = errors.New("missing flag")
+			err = s.erroro("missing flag", s.clen(char))
 			return
 		}
 
 		for {
 			flag := getFlag(char)
 			if flag&typeFlags != 0 {
-				err = errors.New("bad inline flags: cannot turn off flags 'a', 'u' and 'L'")
+				err = s.errorh("bad inline flags: cannot turn off flags 'a', 'u' and 'L'")
 				return
 			}
 
@@ -1043,7 +1046,7 @@ func parseFlags(s *source, state *state, char rune) (addFlags, delFlags uint32, 
 
 			char, ok = s.read()
 			if !ok {
-				err = errors.New("missing :")
+				err = s.errorh("missing :")
 				return
 			}
 
@@ -1053,25 +1056,63 @@ func parseFlags(s *source, state *state, char rune) (addFlags, delFlags uint32, 
 
 			if !isFlag(char) {
 				if isASCIILetter(char) {
-					err = errors.New("unknown flag")
+					err = s.erroro("unknown flag", s.clen(char))
 					return
 				}
 
-				err = errors.New("missing :")
+				err = s.erroro("missing :", s.clen(char))
 				return
 			}
 		}
 	}
 
 	if delFlags&globalFlags != 0 {
-		err = errors.New("bad inline flags: cannot turn off global flag")
+		err = s.erroro("bad inline flags: cannot turn off global flag", 1)
 		return
 	}
 	if addFlags&delFlags != 0 {
-		err = errors.New("bad inline flags: flag turned on and off")
+		err = s.erroro("bad inline flags: flag turned on and off", 1)
 		return
 	}
 
 	result = true
 	return
+}
+
+// unique removes duplicate regex nodes from the slice.
+// This functions is a modified version of `slices.DeleteFunc`.
+// The worst case runtime is O(n^2), so maybe it would be better to use a hashset,
+// if the length of items exceeds a certain size.
+// TODO: validate the performance bottleneck with benchmarks.
+func unique(s []*regexNode) []*regexNode {
+	// Don't start copying elements until we find one to delete.
+	for i, v := range s {
+		if contains(s, i, v) {
+			j := i
+			for i++; i < len(s); i++ {
+				v := s[i]
+				if !contains(s, j, v) {
+					s[j] = v
+					j++
+				} else {
+					// Zero element, so it can garbage collected;
+					// see comment at `slices.DeleteFunc`.
+					s[i] = nil
+				}
+			}
+			return s[:j]
+		}
+	}
+
+	return s
+}
+
+// contains checks, if the regex node `e` exists in the slice `items[:end]`.
+func contains(items []*regexNode, end int, e *regexNode) bool {
+	for i := 0; i < end; i++ {
+		if items[i].equals(e) {
+			return true
+		}
+	}
+	return false
 }

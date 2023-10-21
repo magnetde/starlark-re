@@ -1,9 +1,13 @@
 package re
 
-import "unicode/utf8"
+import (
+	"unicode/utf8"
+
+	sre "github.com/magnetde/starlark-re/syntax"
+)
 
 // Replacement for `FindStringSubmatchIndex`, to specify a starting position.
-func findMatch(r regexEngine, s string, pos int, longest bool) ([]int, error) {
+func findMatch(r sre.Engine, s string, pos int, longest bool) ([]int, error) {
 	in := r.BuildInput(s)
 	return in.Find(pos, longest, nil)
 }
@@ -12,7 +16,7 @@ func findMatch(r regexEngine, s string, pos int, longest bool) ([]int, error) {
 // Needs a special implementation, `FindAllStringSubmatchIndex` removes empty matches right after a prevous match.
 // Is necessary because python includes empty matches right after a previous match.
 // The deliver function must not modify the match.
-func findMatches(r regexEngine, s string, pos int, n int, deliver func(a []int) error) error {
+func findMatches(r sre.Engine, s string, pos int, n int, deliver func(a []int) error) error {
 	if n <= 0 {
 		n = len(s) + 1
 	}

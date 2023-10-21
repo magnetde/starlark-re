@@ -20,6 +20,9 @@ const (
 	FlagDebug
 	FlagASCII
 	FlagFallback
+
+	// Flags supported by the Go regex library.
+	supportedFlags = FlagIgnoreCase | FlagMultiline | FlagDotAll
 )
 
 const (

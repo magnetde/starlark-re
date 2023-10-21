@@ -4,6 +4,108 @@
 # The tests where modified to work with Starlark.
 
 
+
+# Add dummy assignments to fix Python warnings.
+re = re
+same = same
+measure = measure
+trycatch = trycatch
+fail = fail
+
+# All assertion functions
+
+def assertionFail(msg, standardMsg):
+    if msg == None:
+        fail(standardMsg)
+    else:
+        fail("%s : %s" % (standardMsg, msg))
+
+def assertEqual(x, y, msg=None):
+    if x != y: assertionFail(msg, "%s != %s" % (x, y))
+
+def assertNotEqual(x, y, msg=None):
+    if x == y: assertionFail(msg, "%s == %s" % (x, y))
+
+def assertIs(x, y, msg=None):
+    if not same(x, y): assertionFail(msg, "%s is not %s" % (x, y))
+
+def assertIsNot(x, y, msg=None):
+    if same(x, y): assertionFail(msg, "unexpectedly identical: %s" % x)
+
+def assertIsNone(v, msg=None):
+    if v != None: assertionFail(msg, "%s is not None" % v)
+
+def assertIsNotNone(v, msg=None):
+    if v == None: assertionFail(msg, "unexpectedly None" % v)
+
+def assertFalse(v, msg=None):
+    if v: assertionFail(msg, "%s is not false" % v)
+
+def assertTrue(v, msg=None):
+    if not v: assertionFail(msg, "%s is not true" % v)
+
+def assertIn(x, y, msg=None):
+    if x not in y: assertionFail(msg, "%s not found in %s" % (x, y))
+
+def assertLess(x, y, msg=None):
+    if not x < y: assertionFail(msg, "%s not less than %s" % (x, y))
+
+def assertIsInstance(v, t, msg=None):
+    if type(v) != t: assertionFail(msg, "%s is not an instance of %s" % (v, t))
+
+def assertRegex(v, r, msg=None):
+    if not re.search(r, v): assertionFail(msg, "Regex didn't match: %s not found in %s" % (v, r))
+
+def assertRaises(v, e=None, msg=None):
+    err = trycatch(v)[1]
+    if err == None or (e != None and err != e): assertionFail(msg, "%s not raised" % e)
+
+def assertRaisesRegex(v, e=None, msg=None):
+    err = trycatch(v)[1]
+    if err == None or not re.search(e, err): assertionFail(msg, "%s not raised" % e)
+
+# replacement for str % (...)
+def format(s, *args):
+    r = re.compile(r'%(?P<flags>[-+#0])?(?P<width>\d+|\*)?(?:\.(?P<precision>\d+|\*))?(?P<length>[hljztL]|hh|ll)?(?P<specifier>[diuoxXfFeEgGaAcspn])')
+
+    def to_base(n, b):
+        res = ""
+        while n:
+            res += "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"[n % b]
+            n //= b
+        return res[::-1] or "0"
+
+    index = [0] # workaround for missing nonlocal
+
+    def subfmt(m):
+        i = index[0]
+        arg = args[i]
+        if i > len(args): return repr(arg)
+
+        flags, width, precision, length, specifier = m.groups()
+
+        if specifier == "o": v = to_base(int(arg), 8)
+        elif specifier == "x": v = to_base(int(arg), 16)
+        else: fail("format:", flags, width, precision, length, specifier)
+
+        if width != None:
+            w = int(width)
+            if w > 0:
+                v = max(w - len(v), 0) * (" " if flags == None else flags) + v
+
+        index[0] += 1
+        return v
+
+    return r.sub(subfmt, s)
+
+# fix for starlark; bcat = bytes concat
+def bcat(*args):
+    l = []
+    for arg in args:
+        l += list(arg.elems())
+    return bytes(l)
+
+
 # Re test suite and benchmark suite v1.5
 
 # The 3 possible outcomes for each pattern
@@ -567,68 +669,6 @@ tests.extend([
 ])
 
 
-# Add dummy assignments to fix Python warnings.
-re = re
-assertEqual = assertEqual
-assertNotEqual = assertNotEqual
-assertIs = assertIs
-assertIsNot = assertIsNot
-assertIsNone = assertIsNone
-assertIsNotNone = assertIsNotNone
-assertFalse = assertFalse
-assertTrue = assertTrue
-assertIn = assertIn
-# assertNotIn = assertNotIn
-assertLess = assertLess
-assertIsInstance = assertIsInstance
-assertRegex = assertRegex
-assertRaises = assertRaises
-assertRaisesRegex = assertRaisesRegex
-measure = measure
-trycatch = trycatch
-fail = fail
-
-# replacement for str % (...)
-def format(s, *args):
-    r = re.compile(r'%(?P<flags>[-+#0])?(?P<width>\d+|\*)?(?:\.(?P<precision>\d+|\*))?(?P<length>[hljztL]|hh|ll)?(?P<specifier>[diuoxXfFeEgGaAcspn])')
-
-    def to_base(n, b):
-        res = ""
-        while n:
-            res += "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"[n % b]
-            n //= b
-        return res[::-1] or "0"
-
-    index = [0] # workaround for missing nonlocal
-
-    def subfmt(m):
-        i = index[0]
-        arg = args[i]
-        if i > len(args): return repr(arg)
-
-        flags, width, precision, length, specifier = m.groups()
-
-        if specifier == "o": v = to_base(int(arg), 8)
-        elif specifier == "x": v = to_base(int(arg), 16)
-        else: fail("format:", flags, width, precision, length, specifier)
-
-        if width != None:
-            w = int(width)
-            if w > 0:
-                v = max(w - len(v), 0) * (" " if flags == None else flags) + v
-
-        index[0] += 1
-        return v
-
-    return r.sub(subfmt, s)
-
-# fix for starlark; bcat = bytes concat
-def bcat(*args):
-    l = []
-    for arg in args:
-        l += list(arg.elems())
-    return bytes(l)
-
 def assertTypedEqual(actual, expect, msg=None):
     assertEqual(actual, expect, msg)
     def recurse(actual, expect):
@@ -639,14 +679,23 @@ def assertTypedEqual(actual, expect, msg=None):
             assertIs(type(actual), type(expect), msg)
     recurse(actual, expect)
 
-def checkPatternError(pattern, errmsg):
-    assertRaises(lambda: re.compile(pattern), errmsg)
+def checkPatternError(pattern, errmsg, pos=None):
+    _, err = trycatch(lambda: re.compile(pattern))
 
-def checkTemplateError(pattern, repl, string, errmsg):
-    assertRaises(lambda: re.sub(pattern, repl, string), errmsg)
+    assertIsNotNone(err)
+    assertTrue(err.startswith(errmsg), "%r does not starts with %r" % (err, errmsg))
 
-def checkSyntaxError(pattern, syntax):
-    checkPatternError(pattern, 'invalid or unsupported Perl syntax: `%s`' % syntax)
+    if pos != None:
+        assertTrue(("%s at position %d" % (errmsg, pos)) in err)
+
+def checkTemplateError(pattern, repl, string, errmsg, pos=None):
+    _, err = trycatch(lambda: re.sub(pattern, repl, string))
+
+    assertIsNotNone(err)
+    assertTrue(err.startswith(errmsg), "%r does not starts with %r" % (err, errmsg))
+
+    if pos != None:
+        assertTrue(("%s at position %d" % (errmsg, pos)) in err)
 
 def test_search_star_plus():
     assertEqual(re.search('x*', 'axx').span(0), (0, 0))
@@ -689,11 +738,11 @@ def test_basic_re_sub():
 
     assertEqual(re.sub("(?i)b+", "x", "bbbb BBBB"), 'x x')
     assertEqual(re.sub(r'\d+', bump_num, '08.2 -2 23x99y'),
-                        '9.3 -3 24x100y')
+                '9.3 -3 24x100y')
     assertEqual(re.sub(r'\d+', bump_num, '08.2 -2 23x99y', 3),
-                        '9.3 -3 23x99y')
+                '9.3 -3 23x99y')
     assertEqual(re.sub(r'\d+', bump_num, '08.2 -2 23x99y', count=3),
-                        '9.3 -3 23x99y')
+                '9.3 -3 23x99y')
 
     assertEqual(re.sub('.', lambda m: r"\n", 'x'), '\\n')
     assertEqual(re.sub('.', r"\n", 'x'), '\n')
@@ -767,25 +816,25 @@ def test_sub_template_numeric_escape():
     assertEqual(re.sub('x', r'\0a', 'x'), '\0' + 'a')
 
     checkTemplateError('x', r'\400', 'x',
-                            r'octal escape value \400 outside of ' +
-                            r'range 0-0o377')
+                       r'octal escape value \400 outside of ' +
+                       r'range 0-0o377', 0)
     checkTemplateError('x', r'\777', 'x',
-                            r'octal escape value \777 outside of ' +
-                            r'range 0-0o377')
+                       r'octal escape value \777 outside of ' +
+                       r'range 0-0o377', 0)
 
-    checkTemplateError('x', r'\1', 'x', 'invalid group reference 1')
-    checkTemplateError('x', r'\8', 'x', 'invalid group reference 8')
-    checkTemplateError('x', r'\9', 'x', 'invalid group reference 9')
-    checkTemplateError('x', r'\11', 'x', 'invalid group reference 11')
-    checkTemplateError('x', r'\18', 'x', 'invalid group reference 18')
-    checkTemplateError('x', r'\1a', 'x', 'invalid group reference 1')
-    checkTemplateError('x', r'\90', 'x', 'invalid group reference 90')
-    checkTemplateError('x', r'\99', 'x', 'invalid group reference 99')
-    checkTemplateError('x', r'\118', 'x', 'invalid group reference 11')
-    checkTemplateError('x', r'\11a', 'x', 'invalid group reference 11')
-    checkTemplateError('x', r'\181', 'x', 'invalid group reference 18')
-    checkTemplateError('x', r'\800', 'x', 'invalid group reference 80')
-    checkTemplateError('x', r'\8', '', 'invalid group reference 8')
+    checkTemplateError('x', r'\1', 'x', 'invalid group reference 1', 1)
+    checkTemplateError('x', r'\8', 'x', 'invalid group reference 8', 1)
+    checkTemplateError('x', r'\9', 'x', 'invalid group reference 9', 1)
+    checkTemplateError('x', r'\11', 'x', 'invalid group reference 11', 1)
+    checkTemplateError('x', r'\18', 'x', 'invalid group reference 18', 1)
+    checkTemplateError('x', r'\1a', 'x', 'invalid group reference 1', 1)
+    checkTemplateError('x', r'\90', 'x', 'invalid group reference 90', 1)
+    checkTemplateError('x', r'\99', 'x', 'invalid group reference 99', 1)
+    checkTemplateError('x', r'\118', 'x', 'invalid group reference 11', 1)
+    checkTemplateError('x', r'\11a', 'x', 'invalid group reference 11', 1)
+    checkTemplateError('x', r'\181', 'x', 'invalid group reference 18', 1)
+    checkTemplateError('x', r'\800', 'x', 'invalid group reference 80', 1)
+    checkTemplateError('x', r'\8', '', 'invalid group reference 8', 1)
 
     # in python2.3 (etc), these loop endlessly in sre_parser.py
     assertEqual(re.sub('(((((((((((x)))))))))))', r'\11', 'x'), 'x')
@@ -836,36 +885,36 @@ def test_symbolic_groups_errors():
                       "redefinition of group name 'a' as group 2; " +
                       "was group 1")
     checkPatternError(r'(?P<a>(?P=a))',
-                      "cannot refer to an open group")
+                      "cannot refer to an open group", 10)
     checkPatternError(r'(?Pxy)', 'unknown extension ?Px')
-    checkPatternError(r'(?P<a>)(?P=a', 'missing ), unterminated name')
-    checkPatternError(r'(?P=', 'missing group name')
-    checkPatternError(r'(?P=)', 'missing group name')
-    checkPatternError(r'(?P=1)', "bad character in group name '1'")
+    checkPatternError(r'(?P<a>)(?P=a', 'missing ), unterminated name', 11)
+    checkPatternError(r'(?P=', 'missing group name', 4)
+    checkPatternError(r'(?P=)', 'missing group name', 4)
+    checkPatternError(r'(?P=1)', "bad character in group name '1'", 4)
     checkPatternError(r'(?P=a)', "unknown group name 'a'")
     checkPatternError(r'(?P=a1)', "unknown group name 'a1'")
-    checkPatternError(r'(?P=a.)', "bad character in group name 'a.'")
-    checkPatternError(r'(?P<)', 'missing >, unterminated name')
-    checkPatternError(r'(?P<a', 'missing >, unterminated name')
-    checkPatternError(r'(?P<', 'missing group name')
-    checkPatternError(r'(?P<>)', 'missing group name')
-    checkPatternError(r'(?P<1>)', "bad character in group name '1'")
-    checkPatternError(r'(?P<a.>)', "bad character in group name 'a.'")
-    checkPatternError(r'(?(', 'missing group name')
-    checkPatternError(r'(?())', 'missing group name')
-    checkPatternError(r'(?(a))', "unknown group name 'a'")
-    checkPatternError(r'(?(-1))', "bad character in group name '-1'")
-    checkPatternError(r'(?(1a))', "bad character in group name '1a'")
-    checkPatternError(r'(?(a.))', "bad character in group name 'a.'")
-    checkPatternError('(?P<©>x)', "bad character in group name '©'")
-    checkPatternError('(?P=©)', "bad character in group name '©'")
-    checkPatternError('(?(©)y)', "bad character in group name '©'")
+    checkPatternError(r'(?P=a.)', "bad character in group name 'a.'", 4)
+    checkPatternError(r'(?P<)', 'missing >, unterminated name', 4)
+    checkPatternError(r'(?P<a', 'missing >, unterminated name', 4)
+    checkPatternError(r'(?P<', 'missing group name', 4)
+    checkPatternError(r'(?P<>)', 'missing group name', 4)
+    checkPatternError(r'(?P<1>)', "bad character in group name '1'", 4)
+    checkPatternError(r'(?P<a.>)', "bad character in group name 'a.'", 4)
+    checkPatternError(r'(?(', 'missing group name', 3)
+    checkPatternError(r'(?())', 'missing group name', 3)
+    checkPatternError(r'(?(a))', "unknown group name 'a'", 3)
+    checkPatternError(r'(?(-1))', "bad character in group name '-1'", 3)
+    checkPatternError(r'(?(1a))', "bad character in group name '1a'", 3)
+    checkPatternError(r'(?(a.))', "bad character in group name 'a.'", 3)
+    checkPatternError('(?P<©>x)', "bad character in group name '©'", 4)
+    checkPatternError('(?P=©)', "bad character in group name '©'", 4)
+    checkPatternError('(?(©)y)', "bad character in group name '©'", 3)
     checkPatternError(b'(?P<\xc2\xb5>x)',
-                      r"bad character in group name '\xc2\xb5'")
+                      r"bad character in group name '\xc2\xb5'", 4)
     checkPatternError(b'(?P=\xc2\xb5)',
-                      r"bad character in group name '\xc2\xb5'")
+                      r"bad character in group name '\xc2\xb5'", 4)
     checkPatternError(b'(?(\xc2\xb5)y)',
-                      r"bad character in group name '\xc2\xb5'")
+                      r"bad character in group name '\xc2\xb5'", 3)
 
 def test_symbolic_refs():
     assertEqual(re.sub('(?P<a>x)|(?P<b>y)', r'\g<b>', 'xx'), '')
@@ -880,40 +929,40 @@ def test_symbolic_refs():
 
 def test_symbolic_refs_errors():
     checkTemplateError('(?P<a>x)', r'\g<a', 'xx',
-                            'missing >, unterminated name')
+                       'missing >, unterminated name', 3)
     checkTemplateError('(?P<a>x)', r'\g<', 'xx',
-                            'missing group name')
-    checkTemplateError('(?P<a>x)', r'\g', 'xx', 'missing <')
+                       'missing group name', 3)
+    checkTemplateError('(?P<a>x)', r'\g', 'xx', 'missing <', 2)
     checkTemplateError('(?P<a>x)', r'\g<a a>', 'xx',
-                            "bad character in group name 'a a'")
+                       "bad character in group name 'a a'", 3)
     checkTemplateError('(?P<a>x)', r'\g<>', 'xx',
-                            'missing group name')
+                       'missing group name', 3)
     checkTemplateError('(?P<a>x)', r'\g<1a1>', 'xx',
-                            "bad character in group name '1a1'")
+                       "bad character in group name '1a1'", 3)
     checkTemplateError('(?P<a>x)', r'\g<2>', 'xx',
-                            'invalid group reference 2')
+                       'invalid group reference 2', 3)
     checkTemplateError('(?P<a>x)', r'\2', 'xx',
-                            'invalid group reference 2')
+                       'invalid group reference 2', 1)
     assertRaisesRegex(lambda: re.sub('(?P<a>x)', r'\g<ab>', 'xx'),
                       "unknown group name 'ab'")
     checkTemplateError('(?P<a>x)', r'\g<-1>', 'xx',
-                            "bad character in group name '-1'")
+                       "bad character in group name '-1'", 3)
     checkTemplateError('(?P<a>x)', r'\g<+1>', 'xx',
-                            "bad character in group name '+1'")
+                       "bad character in group name '+1'", 3)
     checkTemplateError('()'*10, r'\g<1_0>', 'xx',
-                            "bad character in group name '1_0'")
+                       "bad character in group name '1_0'", 3)
     checkTemplateError('(?P<a>x)', r'\g< 1 >', 'xx',
-                            "bad character in group name ' 1 '")
+                       "bad character in group name ' 1 '", 3)
     checkTemplateError('(?P<a>x)', r'\g<©>', 'xx',
-                            "bad character in group name '©'")
+                       "bad character in group name '©'", 3)
     checkTemplateError(b'(?P<a>x)', b'\\g<\xc2\xb5>', b'xx',
-                            r"bad character in group name '\xc2\xb5'")
+                       r"bad character in group name '\xc2\xb5'", 3)
     checkTemplateError('(?P<a>x)', r'\g<㊀>', 'xx',
-                            "bad character in group name '㊀'")
+                       "bad character in group name '㊀'", 3)
     checkTemplateError('(?P<a>x)', r'\g<¹>', 'xx',
-                            "bad character in group name '¹'")
+                       "bad character in group name '¹'", 3)
     checkTemplateError('(?P<a>x)', r'\g<१>', 'xx',
-                            "bad character in group name '१'")
+                       "bad character in group name '१'", 3)
 
 def test_re_subn():
     assertEqual(re.subn("(?i)b+", "x", "bbbb BBBB"), ('x x', 2))
@@ -1175,35 +1224,35 @@ def test_re_groupref_exists():
     assertEqual(re.match(pat, 'xc8yz').span(), (0, 5))
 
 def test_re_groupref_exists_errors():
-    checkPatternError(r'(?P<a>)(?(0)a|b)', 'bad group number')
+    checkPatternError(r'(?P<a>)(?(0)a|b)', 'bad group number', 10)
     checkPatternError(r'()(?(-1)a|b)',
-                      "bad character in group name '-1'")
+                      "bad character in group name '-1'", 5)
     checkPatternError(r'()(?(+1)a|b)',
-                      "bad character in group name '+1'")
+                      "bad character in group name '+1'", 5)
     checkPatternError(r'()'*10 + r'(?(1_0)a|b)',
-                      "bad character in group name '1_0'")
+                      "bad character in group name '1_0'", 23)
     checkPatternError(r'()(?( 1 )a|b)',
-                      "bad character in group name ' 1 '")
+                      "bad character in group name ' 1 '", 5)
     checkPatternError(r'()(?(㊀)a|b)',
-                      "bad character in group name '㊀'")
+                      "bad character in group name '㊀'", 5)
     checkPatternError(r'()(?(¹)a|b)',
-                      "bad character in group name '¹'")
+                      "bad character in group name '¹'", 5)
     checkPatternError(r'()(?(१)a|b)',
-                      "bad character in group name '१'")
+                      "bad character in group name '१'", 5)
     checkPatternError(r'()(?(1',
-                      "missing ), unterminated name")
+                      "missing ), unterminated name", 5)
     checkPatternError(r'()(?(1)a',
-                      "missing ), unterminated subpattern")
+                      "missing ), unterminated subpattern", 2)
     checkPatternError(r'()(?(1)a|b',
-                      'missing ), unterminated subpattern')
+                      'missing ), unterminated subpattern', 2)
     checkPatternError(r'()(?(1)a|b|c',
                       'conditional backref with more than ' +
-                      'two branches')
+                      'two branches', 10)
     checkPatternError(r'()(?(1)a|b|c)',
                       'conditional backref with more than ' +
-                      'two branches')
+                      'two branches', 10)
     checkPatternError(r'()(?(2)a)',
-                      "invalid group reference 2")
+                      "invalid group reference 2", 5)
 
 def test_re_groupref_exists_validation_bug():
     for i in range(256):
@@ -1212,9 +1261,9 @@ def test_re_groupref_exists_validation_bug():
 def test_re_groupref_overflow():
     MAXGROUPS = 1000
     checkTemplateError('()', r'\g<%s>' % MAXGROUPS, 'xx',
-                       'invalid group reference %d' % MAXGROUPS)
+                       'invalid group reference %d' % MAXGROUPS, 3)
     checkPatternError(r'(?P<a>)(?(%d))' % MAXGROUPS,
-                      'invalid group reference %d' % MAXGROUPS)
+                      'invalid group reference %d' % MAXGROUPS, 10)
 
 def test_re_groupref():
     assertEqual(re.match(r'^(\|)?([^()]+)\1$', '|a|').groups(),
@@ -1228,7 +1277,7 @@ def test_re_groupref():
     assertEqual(re.match(r'^(?:(a)|c)(\1)?$', 'c').groups(),
                         (None, None))
 
-    checkPatternError(r'(abc\1)', 'cannot refer to an open group')
+    checkPatternError(r'(abc\1)', 'cannot refer to an open group', 4)
 
 def test_groupdict():
     assertEqual(re.match('(?P<first>first) (?P<second>second)',
@@ -1279,7 +1328,7 @@ def test_repeat_minmax():
     assertTrue(re.match(r"^x{}$", "x{}"))
 
     checkPatternError(r'x{2,1}',
-                      'min repeat greater than max repeat')
+                      'min repeat greater than max repeat', 2)
 
 def test_getattr():
     assertEqual(re.compile("(?i)(a)(b)").pattern, "(?i)(a)(b)")
@@ -1299,44 +1348,45 @@ def test_getattr():
     p = re.compile(r'(?i)(?P<first>a)(?P<other>b)')
     assertEqual(sorted(p.groupindex), ['first', 'other'])
     assertEqual(p.groupindex['other'], 2)
+
     def cb(): p.groupindex['other'] = 0
     assertRaises(cb)
     assertEqual(p.groupindex['other'], 2)
 
 def test_special_escapes():
     assertEqual(re.search(r"\b(b.)\b",
-                                "abcd abc bcd bx").group(1), "bx")
+                          "abcd abc bcd bx").group(1), "bx")
     assertEqual(re.search(r"\B(b.)\B",
-                                "abc bcd bc abxd").group(1), "bx")
+                          "abc bcd bc abxd").group(1), "bx")
     assertEqual(re.search(r"\b(b.)\b",
-                                "abcd abc bcd bx", re.ASCII).group(1), "bx")
+                          "abcd abc bcd bx", re.ASCII).group(1), "bx")
     assertEqual(re.search(r"\B(b.)\B",
-                                "abc bcd bc abxd", re.ASCII).group(1), "bx")
+                          "abc bcd bc abxd", re.ASCII).group(1), "bx")
     assertEqual(re.search(r"^abc$", "\nabc\n", re.M).group(0), "abc")
     assertEqual(re.search(r"^\Aabc\Z$", "abc", re.M).group(0), "abc")
     assertIsNone(re.search(r"^\Aabc\Z$", "\nabc\n", re.M))
     assertEqual(re.search(b"\\b(b.)\\b",
-                                b"abcd abc bcd bx").group(1), b"bx")
+                          b"abcd abc bcd bx").group(1), b"bx")
     assertEqual(re.search(b"\\B(b.)\\B",
-                                b"abc bcd bc abxd").group(1), b"bx")
+                          b"abc bcd bc abxd").group(1), b"bx")
     assertEqual(re.search(b"\\b(b.)\\b",
-                                b"abcd abc bcd bx", re.LOCALE).group(1), b"bx")
+                          b"abcd abc bcd bx", re.LOCALE).group(1), b"bx")
     assertEqual(re.search(b"\\B(b.)\\B",
-                                b"abc bcd bc abxd", re.LOCALE).group(1), b"bx")
+                          b"abc bcd bc abxd", re.LOCALE).group(1), b"bx")
     assertEqual(re.search(b"^abc$", b"\nabc\n", re.M).group(0), b"abc")
     assertEqual(re.search(b"^\\Aabc\\Z$", b"abc", re.M).group(0), b"abc")
     assertIsNone(re.search(b"^\\Aabc\\Z$", b"\nabc\n", re.M))
     assertEqual(re.search(r"\d\D\w\W\s\S",
-                                "1aa! a").group(0), "1aa! a")
+                          "1aa! a").group(0), "1aa! a")
     assertEqual(re.search(b"\\d\\D\\w\\W\\s\\S",
-                                b"1aa! a").group(0), b"1aa! a")
+                          b"1aa! a").group(0), b"1aa! a")
     assertEqual(re.search(r"\d\D\w\W\s\S",
-                                "1aa! a", re.ASCII).group(0), "1aa! a")
+                          "1aa! a", re.ASCII).group(0), "1aa! a")
     assertEqual(re.search(b"\\d\\D\\w\\W\\s\\S",
-                                b"1aa! a", re.LOCALE).group(0), b"1aa! a")
+                          b"1aa! a", re.LOCALE).group(0), b"1aa! a")
 
 def test_other_escapes():
-    checkPatternError("\\", 'bad escape (end of pattern)')
+    checkPatternError("\\", 'bad escape (end of pattern)', 0)
     assertEqual(re.match(r"\(", '(').group(), '(')
     assertIsNone(re.match(r"\(", ')'))
     assertEqual(re.match(r"\\", '\\').group(), '\\')
@@ -1359,38 +1409,38 @@ def test_named_unicode_escapes():
     assertIsNone(re.match(r'\N{LESS-THAN SIGN}', '>'))
     assertTrue(re.match(r'\N{SNAKE}', '\U0001f40d'))
     assertTrue(re.match(r'\N{ARABIC LIGATURE UIGHUR KIRGHIZ YEH WITH ' +
-                                r'HAMZA ABOVE WITH ALEF MAKSURA ISOLATED FORM}',
-                                '\ufbf9'))
+                        r'HAMZA ABOVE WITH ALEF MAKSURA ISOLATED FORM}',
+                        '\ufbf9'))
     assertTrue(re.match(r'[\N{LESS-THAN SIGN}-\N{GREATER-THAN SIGN}]',
-                                '='))
+                        '='))
     assertIsNone(re.match(r'[\N{LESS-THAN SIGN}-\N{GREATER-THAN SIGN}]',
-                                ';'))
+                        ';'))
 
     # test errors in \N{name} handling - only valid names should pass
-    checkPatternError(r'\N', 'missing {')
-    checkPatternError(r'[\N]', 'missing {')
-    checkPatternError(r'\N{', 'missing character name')
-    checkPatternError(r'[\N{', 'missing character name')
-    checkPatternError(r'\N{}', 'missing character name')
-    checkPatternError(r'[\N{}]', 'missing character name')
-    checkPatternError(r'\NSNAKE}', 'missing {')
-    checkPatternError(r'[\NSNAKE}]', 'missing {')
+    checkPatternError(r'\N', 'missing {', 2)
+    checkPatternError(r'[\N]', 'missing {', 3)
+    checkPatternError(r'\N{', 'missing character name', 3)
+    checkPatternError(r'[\N{', 'missing character name', 4)
+    checkPatternError(r'\N{}', 'missing character name', 3)
+    checkPatternError(r'[\N{}]', 'missing character name', 4)
+    checkPatternError(r'\NSNAKE}', 'missing {', 2)
+    checkPatternError(r'[\NSNAKE}]', 'missing {', 3)
     checkPatternError(r'\N{SNAKE',
-                            'missing }, unterminated name')
+                            'missing }, unterminated name', 3)
     checkPatternError(r'[\N{SNAKE]',
-                            'missing }, unterminated name')
+                            'missing }, unterminated name', 4)
     checkPatternError(r'[\N{SNAKE]}',
-                            "undefined character name 'SNAKE]'")
+                            "undefined character name 'SNAKE]'", 1)
     checkPatternError(r'\N{SPAM}',
-                            "undefined character name 'SPAM'")
+                            "undefined character name 'SPAM'", 0)
     checkPatternError(r'[\N{SPAM}]',
-                            "undefined character name 'SPAM'")
+                            "undefined character name 'SPAM'", 1)
     checkPatternError(r'\N{KEYCAP NUMBER SIGN}',
-                        "undefined character name 'KEYCAP NUMBER SIGN'")
+                        "undefined character name 'KEYCAP NUMBER SIGN'", 0)
     checkPatternError(r'[\N{KEYCAP NUMBER SIGN}]',
-                        "undefined character name 'KEYCAP NUMBER SIGN'")
-    checkPatternError(b'\\N{LESS-THAN SIGN}', r'bad escape \N')
-    checkPatternError(b'[\\N{LESS-THAN SIGN}]', r'bad escape \N')
+                        "undefined character name 'KEYCAP NUMBER SIGN'", 1)
+    checkPatternError(b'\\N{LESS-THAN SIGN}', r'bad escape \N', 0)
+    checkPatternError(b'[\\N{LESS-THAN SIGN}]', r'bad escape \N', 1)
 
 def test_string_boundaries():
     # See http://bugs.python.org/issue10713
@@ -1657,7 +1707,7 @@ def assertMatch(pattern, text, match=None, span=None,
         span = (0, len(text))
     elif match == None or span == None:
         fail('If match is not None, span should be specified ' +
-                            '(and vice versa).')
+             '(and vice versa).')
     m = matcher(pattern, text)
     assertTrue(m)
     assertEqual(m.group(), match)
@@ -1742,15 +1792,15 @@ def test_sre_character_literals():
     assertTrue(re.match(r"\018", "\0018"))
     checkPatternError(r"\567",
                       r'octal escape value \567 outside of ' +
-                      r'range 0-0o377')
-    checkPatternError(r"\911", 'invalid group reference 91')
-    checkPatternError(r"\x1", r'incomplete escape \x1')
-    checkPatternError(r"\x1z", r'incomplete escape \x1')
-    checkPatternError(r"\u123", r'incomplete escape \u123')
-    checkPatternError(r"\u123z", r'incomplete escape \u123')
-    checkPatternError(r"\U0001234", r'incomplete escape \U0001234')
-    checkPatternError(r"\U0001234z", r'incomplete escape \U0001234')
-    checkPatternError(r"\U00110000", r'bad escape \U00110000')
+                      r'range 0-0o377', 0)
+    checkPatternError(r"\911", 'invalid group reference 91', 1)
+    checkPatternError(r"\x1", r'incomplete escape \x1', 0)
+    checkPatternError(r"\x1z", r'incomplete escape \x1', 0)
+    checkPatternError(r"\u123", r'incomplete escape \u123', 0)
+    checkPatternError(r"\u123z", r'incomplete escape \u123', 0)
+    checkPatternError(r"\U0001234", r'incomplete escape \U0001234', 0)
+    checkPatternError(r"\U0001234z", r'incomplete escape \U0001234', 0)
+    checkPatternError(r"\U00110000", r'bad escape \U00110000', 0)
 
 def test_sre_character_class_literals():
     for i in [0, 8, 16, 32, 64, 127, 128, 255, 256, 0xFFFF, 0x10000, 0x10FFFF]:
@@ -1772,12 +1822,12 @@ def test_sre_character_class_literals():
         assertTrue(re.match(format(r"[\U%08xz]", i), chr(i)+"z"))
     checkPatternError(r"[\567]",
                       r'octal escape value \567 outside of ' +
-                      r'range 0-0o377')
-    checkPatternError(r"[\911]", r'bad escape \9')
-    checkPatternError(r"[\x1z]", r'incomplete escape \x1')
-    checkPatternError(r"[\u123z]", r'incomplete escape \u123')
-    checkPatternError(r"[\U0001234z]", r'incomplete escape \U0001234')
-    checkPatternError(r"[\U00110000]", r'bad escape \U00110000')
+                      r'range 0-0o377', 1)
+    checkPatternError(r"[\911]", r'bad escape \9', 1)
+    checkPatternError(r"[\x1z]", r'incomplete escape \x1', 1)
+    checkPatternError(r"[\u123z]", r'incomplete escape \u123', 1)
+    checkPatternError(r"[\U0001234z]", r'incomplete escape \U0001234', 1)
+    checkPatternError(r"[\U00110000]", r'bad escape \U00110000', 1)
     assertTrue(re.match(r"[\U0001d49c-\U0001d4b5]", "\U0001d49e"))
 
 def test_sre_byte_literals():
@@ -1796,10 +1846,10 @@ def test_sre_byte_literals():
     assertTrue(re.match(b"\\018", b"\0018"))
     checkPatternError(b"\\567",
                       r'octal escape value \567 outside of ' +
-                      r'range 0-0o377')
-    checkPatternError(b"\\911", 'invalid group reference 91')
-    checkPatternError(b"\\x1", r'incomplete escape \x1')
-    checkPatternError(b"\\x1z", r'incomplete escape \x1')
+                      r'range 0-0o377', 0)
+    checkPatternError(b"\\911", 'invalid group reference 91', 1)
+    checkPatternError(b"\\x1", r'incomplete escape \x1', 0)
+    checkPatternError(b"\\x1z", r'incomplete escape \x1', 0)
 
 def test_sre_byte_class_literals():
     for i in [0, 8, 16, 32, 64, 127, 128, 255]:
@@ -1815,20 +1865,20 @@ def test_sre_byte_class_literals():
     assertRaises(lambda: re.compile(b"[\\U00012345]"))
     checkPatternError(b"[\\567]",
                       r'octal escape value \567 outside of ' +
-                      r'range 0-0o377')
-    checkPatternError(b"[\\911]", r'bad escape \9')
-    checkPatternError(b"[\\x1z]", r'incomplete escape \x1')
+                      r'range 0-0o377', 1)
+    checkPatternError(b"[\\911]", r'bad escape \9', 1)
+    checkPatternError(b"[\\x1z]", r'incomplete escape \x1', 1)
 
 def test_character_set_errors():
-    checkPatternError(r'[', 'unterminated character set')
-    checkPatternError(r'[^', 'unterminated character set')
-    checkPatternError(r'[a', 'unterminated character set')
+    checkPatternError(r'[', 'unterminated character set', 0)
+    checkPatternError(r'[^', 'unterminated character set', 0)
+    checkPatternError(r'[a', 'unterminated character set', 0)
     # bug 545855 -- This pattern failed to cause a compile error as it
     # should, instead provoking a TypeError.
-    checkPatternError(r"[a-", 'unterminated character set')
-    checkPatternError(r"[\w-b]", r'bad character range \w-b')
-    checkPatternError(r"[a-\w]", r'bad character range a-\w')
-    checkPatternError(r"[b-a]", 'bad character range b-a')
+    checkPatternError(r"[a-", 'unterminated character set', 0)
+    checkPatternError(r"[\w-b]", r'bad character range \w-b', 1)
+    checkPatternError(r"[a-\w]", r'bad character range a-\w', 1)
+    checkPatternError(r"[b-a]", 'bad character range b-a', 1)
 
 def test_bug_113254():
     assertEqual(re.match(r'(a)|(b)', 'b').start(1), -1)
@@ -1870,9 +1920,9 @@ def test_nothing_to_repeat():
     for reps in '*', '+', '?', '{1,2}':
         for mod in '', '?':
             checkPatternError('%s%s' % (reps, mod),
-                              'nothing to repeat')
+                              'nothing to repeat', 0)
             checkPatternError('(?:%s%s)' % (reps, mod),
-                              'nothing to repeat')
+                              'nothing to repeat', 3)
 
 def test_multiple_repeat():
     for outer_reps in '*', '+', '?', '{1,2}':
@@ -1884,7 +1934,7 @@ def test_multiple_repeat():
                         continue
                     inner_op = inner_reps + inner_mod
                     checkPatternError(r'x%s%s' % (inner_op, outer_op),
-                            'multiple repeat')
+                            'multiple repeat', 1 + len(inner_op))
 
 def test_unlimited_zero_width_repeat():
     # Issue #9669
@@ -2039,16 +2089,16 @@ def test_inline_flags():
     assertTrue(re.match(' (?x) (?i) ' + upper_char, lower_char, re.X))
 
     msg = "global flags not at the start of the expression"
-    checkPatternError(upper_char + '(?i)', msg)
+    checkPatternError(upper_char + '(?i)', msg, 3)
 
-    checkPatternError('(?s).(?i)' + upper_char, msg)
-    checkPatternError('(?i) ' + upper_char + ' (?x)', msg)
-    checkPatternError(' (?x) (?i) ' + upper_char, msg)
-    checkPatternError('^(?i)' + upper_char, msg)
-    checkPatternError('$|(?i)' + upper_char, msg)
-    checkPatternError('(?:(?i)' + upper_char + ')', msg)
-    checkPatternError('(^)?(?(1)(?i)' + upper_char + ')', msg)
-    checkPatternError('($)?(?(1)|(?i)' + upper_char + ')', msg)
+    checkPatternError('(?s).(?i)' + upper_char, msg, 5)
+    checkPatternError('(?i) ' + upper_char + ' (?x)', msg, 9)
+    checkPatternError(' (?x) (?i) ' + upper_char, msg, 1)
+    checkPatternError('^(?i)' + upper_char, msg, 1)
+    checkPatternError('$|(?i)' + upper_char, msg, 2)
+    checkPatternError('(?:(?i)' + upper_char + ')', msg, 3)
+    checkPatternError('(^)?(?(1)(?i)' + upper_char + ')', msg, 9)
+    checkPatternError('($)?(?(1)|(?i)' + upper_char + ')', msg, 10)
 
 def test_dollar_matches_twice():
     r"""Test that $ does not include \n
@@ -2117,25 +2167,25 @@ def test_scoped_flags():
     assertTrue(re.match(r'\W(?u:\w)\W', '\u00E0\u00E0\u00E0', re.ASCII))
 
     checkPatternError(r'(?a)(?-a:\w)',
-            "bad inline flags: cannot turn off flags 'a', 'u' and 'L'")
+            "bad inline flags: cannot turn off flags 'a', 'u' and 'L'", 8)
     checkPatternError(r'(?i-i:a)',
-            'bad inline flags: flag turned on and off')
+            'bad inline flags: flag turned on and off', 5)
     checkPatternError(r'(?au:a)',
-            "bad inline flags: flags 'a', 'u' and 'L' are incompatible")
+            "bad inline flags: flags 'a', 'u' and 'L' are incompatible", 4)
     checkPatternError(b'(?aL:a)',
-            "bad inline flags: flags 'a', 'u' and 'L' are incompatible")
+            "bad inline flags: flags 'a', 'u' and 'L' are incompatible", 4)
 
-    checkPatternError(r'(?-', 'missing flag')
-    checkPatternError(r'(?-+', 'missing flag')
-    checkPatternError(r'(?-z', 'unknown flag')
-    checkPatternError(r'(?-i', 'missing :')
-    checkPatternError(r'(?-i)', 'missing :')
-    checkPatternError(r'(?-i+', 'missing :')
-    checkPatternError(r'(?-iz', 'unknown flag')
-    checkPatternError(r'(?i:', 'missing ), unterminated subpattern')
-    checkPatternError(r'(?i', 'missing -, : or )')
-    checkPatternError(r'(?i+', 'missing -, : or )')
-    checkPatternError(r'(?iz', 'unknown flag')
+    checkPatternError(r'(?-', 'missing flag', 3)
+    checkPatternError(r'(?-+', 'missing flag', 3)
+    checkPatternError(r'(?-z', 'unknown flag', 3)
+    checkPatternError(r'(?-i', 'missing :', 4)
+    checkPatternError(r'(?-i)', 'missing :', 4)
+    checkPatternError(r'(?-i+', 'missing :', 4)
+    checkPatternError(r'(?-iz', 'unknown flag', 4)
+    checkPatternError(r'(?i:', 'missing ), unterminated subpattern', 0)
+    checkPatternError(r'(?i', 'missing -, : or )', 3)
+    checkPatternError(r'(?i+', 'missing -, : or )', 3)
+    checkPatternError(r'(?iz', 'unknown flag', 3)
 
 def test_ignore_spaces():
     for space in " \t\n\r\v\f".elems():
@@ -2220,15 +2270,38 @@ def test_repeat_minmax_overflow():
     assertRaises(lambda: re.compile(r".{%d,}?" % 1<<128))
     assertRaises(lambda: re.compile(r".{%d,%d}" % (1<<129, 1<<128)))
 
+def test_look_behind_overflow():
+    string = "x" * 2500000
+    p1 = r"(?<=((.{%d}){%d}){%d})"
+    p2 = r"(?<!((.{%d}){%d}){%d})"
+    # Test that the templates are valid and look-behind with width 2**21
+    # (larger than sys.maxunicode) are supported.
+    assertEqual(re.search(p1 % (1<<7, 1<<7, 1<<7), string).span(),
+                        (1<<21, 1<<21))
+    assertEqual(re.search(p2 % (1<<7, 1<<7, 1<<7), string).span(),
+                        (0, 0))
+    # Test that 2**22 is accepted as a repetition number and look-behind
+    # width.
+    re.compile(p1 % (1<<22, 1, 1))
+    re.compile(p1 % (1, 1<<22, 1))
+    re.compile(p1 % (1, 1, 1<<22))
+    re.compile(p2 % (1<<22, 1, 1))
+    re.compile(p2 % (1, 1<<22, 1))
+    re.compile(p2 % (1, 1, 1<<22))
+    # But 2**66 is too large for look-behind width.
+    errmsg = "looks too much behind"
+    assertRaisesRegex(lambda: re.compile(p1 % (1<<22, 1<<22, 1<<22)), errmsg)
+    assertRaisesRegex(lambda: re.compile(p2 % (1<<22, 1<<22, 1<<22)), errmsg)
+
 def test_backref_group_name_in_exception():
     # Issue 17341: Poor error message when compiling invalid regex
     checkPatternError('(?P=<foo>)',
-                      "bad character in group name '<foo>'")
+                      "bad character in group name '<foo>'", 4)
 
 def test_group_name_in_exception():
     # Issue 17341: Poor error message when compiling invalid regex
     checkPatternError('(?P<?foo>)',
-                      "bad character in group name '?foo'")
+                      "bad character in group name '?foo'", 4)
 
 def test_issue17998():
     for reps in '*', '+', '?', '{1}':
@@ -2331,30 +2404,36 @@ def check_en_US_utf8():
     assertIsNone(re.match(b'(?Li)\xe5', b'\xc5'))
 
 def test_error():
-    assertRaises(lambda: re.compile('(\u20ac))'))
+    _, err = trycatch(lambda: re.compile('(\u20ac))'))
+    assertTrue(' at position 5' in err)
+
     # Bytes pattern
-    assertRaises(lambda: re.compile(b'(\xa4))'))
+    _, err = trycatch(lambda: re.compile(b'(\xa4))'))
+    assertTrue(' at position 3' in err)
+
     # Multiline pattern
-    assertRaises(lambda: re.compile("""
+    _, err = trycatch(lambda: re.compile("""
             (
                 abc
             )
             )
             (
             """, re.VERBOSE))
+    assertTrue(' at position 61' in err)
+    assertTrue('(line 5, column 13)' in err)
 
 def test_misc_errors():
-    checkPatternError(r'(', 'missing ), unterminated subpattern')
-    checkPatternError(r'((a|b)', 'missing ), unterminated subpattern')
-    checkPatternError(r'(a|b))', 'unbalanced parenthesis')
-    checkPatternError(r'(?P', 'unexpected end of pattern')
-    checkPatternError(r'(?z)', 'unknown extension ?z')
-    checkPatternError(r'(?iz)', 'unknown flag')
-    checkPatternError(r'(?i', 'missing -, : or )')
-    checkPatternError(r'(?#abc', 'missing ), unterminated comment')
-    checkPatternError(r'(?<', 'unexpected end of pattern')
-    checkPatternError(r'(?<>)', 'unknown extension ?<>')
-    checkPatternError(r'(?', 'unexpected end of pattern')
+    checkPatternError(r'(', 'missing ), unterminated subpattern', 0)
+    checkPatternError(r'((a|b)', 'missing ), unterminated subpattern', 0)
+    checkPatternError(r'(a|b))', 'unbalanced parenthesis', 5)
+    checkPatternError(r'(?P', 'unexpected end of pattern', 3)
+    checkPatternError(r'(?z)', 'unknown extension ?z', 1)
+    checkPatternError(r'(?iz)', 'unknown flag', 3)
+    checkPatternError(r'(?i', 'missing -, : or )', 3)
+    checkPatternError(r'(?#abc', 'missing ), unterminated comment', 0)
+    checkPatternError(r'(?<', 'unexpected end of pattern', 3)
+    checkPatternError(r'(?<>)', 'unknown extension ?<>', 1)
+    checkPatternError(r'(?', 'unexpected end of pattern', 2)
 
 def test_pattern_compare():
     pattern1 = re.compile('abc', re.IGNORECASE)

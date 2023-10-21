@@ -12,6 +12,7 @@ var (
 	hexChars      = "0123456789abcdef"
 )
 
+// IsASCIIString checks, if the string only contains ASCII characters.
 func IsASCIIString(s string) bool {
 	for i := 0; i < len(s); i++ {
 		if s[i] > unicode.MaxASCII {
@@ -21,15 +22,23 @@ func IsASCIIString(s string) bool {
 	return true
 }
 
-func QuoteString(s string, isString bool) string {
+// Repr returns a representation of the string.
+// The parameter `isString` controls, whether the string should be interpreted as a string or a bytes object.
+func Repr(s string, isString bool) string {
 	return quoteString(s, isString, true, false)
 }
 
-func QuoteASCII(s string, isString bool) string {
-	return quoteString(s, isString, true, true)
+// ASCII returns a representation of the string.
+// The parameter `isString` controls, whether the string should be interpreted as a string or a bytes object.
+func ASCII(s string, isString bool) string {
+	return quoteString(s, isString, false, true)
 }
 
-func quoteString(s string, isString bool, bprefix bool, ascii bool) string {
+// quoteString quotes a string and escapes non-printable characters.
+// The parameter `isString` controls, whether the string should be interpreted as a string or a bytes object.
+// If the parameter `bPrefix` is true, the prefix "b" is added to the beginning of the string.
+// if `ascii` is true, all non-ASCII characters are escaped.
+func quoteString(s string, isString bool, bPrefix bool, ascii bool) string {
 	var b strings.Builder
 	b.Grow(len(s) + 3)
 
@@ -40,12 +49,16 @@ func quoteString(s string, isString bool, bprefix bool, ascii bool) string {
 		quote = '"'
 	}
 
-	if !isString && bprefix {
+	if !isString && bPrefix {
 		b.WriteByte('b')
 	}
 
 	if isString {
-		s = strconv.Quote(s)
+		if !ascii {
+			s = strconv.Quote(s)
+		} else {
+			s = strconv.QuoteToASCII(s)
+		}
 
 		if quote == '\'' {
 			b.WriteByte('\'')
@@ -57,7 +70,8 @@ func quoteString(s string, isString bool, bprefix bool, ascii bool) string {
 	} else {
 		b.WriteByte(quote)
 		for i := 0; i < len(s); i++ {
-			writeEscapedByte(s[i], quote, &b)
+			c := s[i]
+			WriteEscapedByte(&b, c, c == quote || c == '\\')
 		}
 		b.WriteByte(quote)
 	}
@@ -65,35 +79,38 @@ func quoteString(s string, isString bool, bprefix bool, ascii bool) string {
 	return b.String()
 }
 
-func writeEscapedByte(c byte, quote byte, b *strings.Builder) {
-	if c == quote || c == '\\' { // always backslashed
-		b.WriteByte('\\')
-		b.WriteByte(c)
+// WriteEscapedByte escapes a byte and writes it to the string builder.
+// All special and non-ascii characters are escaped by default.
+// If `force` is true, c is also escaped.
+func WriteEscapedByte(w *strings.Builder, c byte, force bool) {
+	if force {
+		w.WriteByte('\\')
+		w.WriteByte(c)
 		return
 	}
 
 	switch c {
 	case '\a':
-		b.WriteString(`\a`)
+		w.WriteString(`\a`)
 	case '\b':
-		b.WriteString(`\b`)
+		w.WriteString(`\b`)
 	case '\f':
-		b.WriteString(`\f`)
+		w.WriteString(`\f`)
 	case '\n':
-		b.WriteString(`\n`)
+		w.WriteString(`\n`)
 	case '\r':
-		b.WriteString(`\r`)
+		w.WriteString(`\r`)
 	case '\t':
-		b.WriteString(`\t`)
+		w.WriteString(`\t`)
 	case '\v':
-		b.WriteString(`\v`)
+		w.WriteString(`\v`)
 	default:
 		if c < utf8.RuneSelf && unicode.IsPrint(rune(c)) {
-			b.WriteByte(c)
+			w.WriteByte(c)
 		} else {
-			b.WriteString(`\x`)
-			b.WriteByte(hexChars[c>>4])
-			b.WriteByte(hexChars[c&0xF])
+			w.WriteString(`\x`)
+			w.WriteByte(hexChars[c>>4])
+			w.WriteByte(hexChars[c&0xF])
 		}
 	}
 }

@@ -1,4 +1,4 @@
-package re
+package syntax
 
 import (
 	"io"
@@ -11,36 +11,39 @@ import (
 
 	"github.com/dlclark/regexp2"
 
-	sre "github.com/magnetde/starlark-re/syntax"
 	"github.com/magnetde/starlark-re/util"
 )
 
 // Needs to have exported fields, because engine has to share common methods
 // with interface `Subexp` in package `syntax`.
-type regexEngine interface {
+type Engine interface {
+	Flags() uint32
 	SubexpNames() []string
 	SubexpCount() int
 	SubexpIndex(name string) int
-	SupportsLongest() bool          // support for the longest match function
-	BuildInput(s string) regexInput // Fix invalid codepoints
+	SupportsLongest() bool     // support for the longest match function
+	BuildInput(s string) Input // Fix invalid codepoints
 }
 
-type regexInput interface {
+type Input interface {
 	Find(pos int, longest bool, dstCap []int) ([]int, error)
 }
 
-// input must be preprocessed
-func compileRegex(p *sre.Preprocessor, fallbackEnabled bool) (regexEngine, error) {
-	var err error
+func Compile(pattern string, isStr bool, flags uint32, fallbackEnabled bool) (Engine, error) {
+	// replace unicode patterns, that are supported by Python but not supported by Go
+	p, err := newPreprocessor(pattern, isStr, flags)
+	if err != nil {
+		return nil, err
+	}
 
-	flags := p.Flags()
+	flags = p.flags()
 
 	useFallback := false
 	if fallbackEnabled {
-		if flags&sre.FlagFallback != 0 {
+		if flags&FlagFallback != 0 {
 			useFallback = true
-			flags &= ^sre.FlagFallback
-		} else if !p.IsSupported() {
+			flags &= ^FlagFallback
+		} else if !p.isSupported() {
 			useFallback = true
 		}
 	}
@@ -48,7 +51,7 @@ func compileRegex(p *sre.Preprocessor, fallbackEnabled bool) (regexEngine, error
 	if !useFallback {
 		var r *regexp.Regexp
 
-		s := p.String()
+		s := p.stdPattern()
 
 		r, err = regexp.Compile(s)
 		if err != nil {
@@ -57,6 +60,7 @@ func compileRegex(p *sre.Preprocessor, fallbackEnabled bool) (regexEngine, error
 
 		re := &stdRegex{
 			re:     r,
+			flags:  flags,
 			numCap: numCap(r),
 		}
 
@@ -64,20 +68,20 @@ func compileRegex(p *sre.Preprocessor, fallbackEnabled bool) (regexEngine, error
 	} else {
 		var r2 *regexp2.Regexp
 
-		s, remapping := p.FallbackString()
+		s, remapping := p.fallbackPattern()
 
 		options := regexp2.None | regexp2.RE2
 
-		if flags&sre.FlagIgnoreCase != 0 {
+		if flags&FlagIgnoreCase != 0 {
 			options |= regexp2.IgnoreCase
 		}
-		if flags&sre.FlagMultiline != 0 {
+		if flags&FlagMultiline != 0 {
 			options |= regexp2.Multiline
 		}
-		if flags&sre.FlagDotAll != 0 {
+		if flags&FlagDotAll != 0 {
 			options |= regexp2.Singleline
 		}
-		if flags&sre.FlagUnicode != 0 {
+		if flags&FlagUnicode != 0 {
 			options |= regexp2.Unicode
 		}
 
@@ -110,8 +114,9 @@ func compileRegex(p *sre.Preprocessor, fallbackEnabled bool) (regexEngine, error
 
 		re := &fallbEngine{
 			re:         r2,
+			flags:      flags,
 			numSubexp:  numCapFallb(r2) - 1,
-			groupNames: p.GroupNames(),
+			groupNames: p.groupNames(),
 		}
 
 		return re, nil
@@ -135,6 +140,7 @@ func numCapFallb(r *regexp2.Regexp) int {
 
 type stdRegex struct {
 	re     *regexp.Regexp
+	flags  uint32
 	numCap int
 }
 
@@ -146,6 +152,7 @@ type stdInput struct {
 
 type fallbEngine struct {
 	re        *regexp2.Regexp
+	flags     uint32
 	numSubexp int
 
 	groupNames   map[string]int // fallback preprocessor renames the groups, so the original mapping must be saved
@@ -160,11 +167,15 @@ type advInput struct {
 }
 
 var (
-	_ regexEngine = (*stdRegex)(nil)
-	_ regexInput  = (*stdInput)(nil)
-	_ regexEngine = (*fallbEngine)(nil)
-	_ regexInput  = (*advInput)(nil)
+	_ Engine = (*stdRegex)(nil)
+	_ Input  = (*stdInput)(nil)
+	_ Engine = (*fallbEngine)(nil)
+	_ Input  = (*advInput)(nil)
 )
+
+func (r *stdRegex) Flags() uint32 {
+	return r.flags
+}
 
 func (r *stdRegex) SubexpNames() []string {
 	return r.re.SubexpNames()
@@ -182,7 +193,7 @@ func (r *stdRegex) SupportsLongest() bool {
 	return true
 }
 
-func (r *stdRegex) BuildInput(s string) regexInput {
+func (r *stdRegex) BuildInput(s string) Input {
 	s, offsets := replaceInvalidChars(s)
 
 	i := &stdInput{
@@ -282,6 +293,10 @@ func applyOffsets(a []int, offsets []int) {
 	}
 }
 
+func (r *fallbEngine) Flags() uint32 {
+	return r.flags
+}
+
 func (r *fallbEngine) SubexpNames() []string {
 	names := make([]string, 1+r.numSubexp)
 
@@ -308,7 +323,7 @@ func (r *fallbEngine) SupportsLongest() bool {
 	return false
 }
 
-func (r *fallbEngine) BuildInput(s string) regexInput {
+func (r *fallbEngine) BuildInput(s string) Input {
 	chars, offsetsRune, offsetsByte := getRuneOffsets(s)
 
 	return &advInput{

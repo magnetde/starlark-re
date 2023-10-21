@@ -45,7 +45,7 @@ func (r *templateReplacer) replace(m *Match) (string, error) {
 		if t.IsLiteral() {
 			b.WriteString(t.Literal)
 		} else {
-			g := m.groups[t.Index]
+			g := m.groups[t.Group]
 			if !g.empty() {
 				b.WriteString(g.str)
 			}
@@ -106,14 +106,14 @@ func getReplacer(thread *starlark.Thread, p *Pattern, r starlark.Value) (replace
 }
 
 // if returned slice empty: contains no backreferences and is just a literal
-func newTemplateReplacer(r regexEngine, repl string, isString bool) (replacer, error) {
+func newTemplateReplacer(r sre.Engine, repl string, isString bool) (replacer, error) {
 	var rules []sre.TemplateRule
 	withMatch := false
 
 	if !strings.ContainsRune(repl, '\\') { // check, if the template should be parsed
 		rules = []sre.TemplateRule{{
 			Literal: repl,
-			Index:   -1,
+			Group:   -1,
 		}}
 	} else {
 		var err error

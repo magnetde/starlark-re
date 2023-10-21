@@ -1,7 +1,6 @@
 package syntax
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 
@@ -31,11 +30,6 @@ func isDigitByte(c byte) bool {
 // isOctDigit checks if the given character is an octal digit.
 func isOctDigit(b rune) bool {
 	return '0' <= b && b <= '7'
-}
-
-// isOctDigit checks if the given byte is an octal digit.
-func isOctDigitByte(b byte) bool {
-	return isOctDigit(rune(b))
 }
 
 // toDigit returns the corresponding integer value of a character.
@@ -73,17 +67,17 @@ func lookupUnicodeName(name string) (rune, bool) {
 	return unicodeCodepoints[i], true
 }
 
-// checkGroupName checks if a group name is valid.
-// It ensures that group names in string patterns are valid unicode identifiers,
-// and that group names in byte patterns are only made from ASCII characters.
-func checkGroupName(name string, isStr bool) error {
-	if !(isStr || util.IsASCIIString(name)) {
-		return fmt.Errorf("bad character in group name %s", util.QuoteString(name, isStr, false))
+// asciiEscape escapes a string by escaping all non-printable characters to its escape sequence
+// and by escaping all non-ascii bytes to an hexadecimal escape sequence.
+func asciiEscape(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+
+	for i := 0; i < len(s); i++ {
+		util.WriteEscapedByte(&b, s[i], false)
 	}
-	if !isIdentifier(name) {
-		return fmt.Errorf("bad character in group name %s", util.QuoteString(name, isStr, true))
-	}
-	return nil
+
+	return b.String()
 }
 
 // isIdentifier checks, whether name is a valid unicode identifier.

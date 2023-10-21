@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/magnetde/starlark-re/util"
 )
 
 // source represents a reader to read the regex string.
@@ -68,10 +70,12 @@ func (s *source) peek() (rune, bool) {
 }
 
 // skipUntil skips all characters, until the given character is found.
-// The read position is then moved to the character following the specified character.
-// If the rune is not found in the string, the read position will be moved to the end of the string.
-func (s *source) skipUntil(c rune) {
-	_, s.cur, _ = strings.Cut(s.cur, string(c))
+// The read position is then moved to the character that follows the specified character and the skipped characters are returned.
+// If the rune is not found in the string, the read position is moved to the end of the string.
+func (s *source) skipUntil(c rune) (string, bool) {
+	pre, rest, ok := strings.Cut(s.cur, string(c))
+	s.cur = rest
+	return pre, ok
 }
 
 // getUntil returns all characters, until the given character is found.
@@ -80,10 +84,10 @@ func (s *source) skipUntil(c rune) {
 func (s *source) getUntil(c rune, name string) (string, error) {
 	pre, rest, ok := strings.Cut(s.cur, string(c))
 	if pre == "" {
-		return "", fmt.Errorf("missing %s", name)
+		return "", s.errorh(fmt.Sprintf("missing %s", name))
 	}
 	if !ok {
-		return "", fmt.Errorf("missing %c, unterminated name", c)
+		return "", s.errorh(fmt.Sprintf("missing %c, unterminated name", c))
 	}
 
 	s.cur = rest
@@ -160,4 +164,59 @@ func (s *source) nextFunc(n int, fn func(r byte) bool) string {
 	s.cur = s.cur[e:]
 
 	return res
+}
+
+// checkGroupName checks if a group name is valid.
+// It ensures that group names in string patterns are valid unicode identifiers,
+// and that group names in byte patterns are only made from ASCII characters.
+func (s *source) checkGroupName(name string, offset int) error {
+	if !(s.isStr || util.IsASCIIString(name)) {
+		return s.erroro("bad character in group name "+util.ASCII(name, s.isStr), len(name)+offset)
+	}
+	if !isIdentifier(name) {
+		return s.erroro("bad character in group name "+util.Repr(name, s.isStr), len(name)+offset)
+	}
+	return nil
+}
+
+// errorp returns a new error at the given position in the string of the source object.
+// If the source represents a bytes object, all non-ascii characters in the message are escaped.
+// If the string of the source object contains new line characters, the line and column number
+// is also added to the error message.
+func (s *source) errorp(msg string, pos int) error {
+	if !s.isStr {
+		msg = asciiEscape(msg)
+	}
+
+	msg = fmt.Sprintf("%s at position %d", msg, pos)
+
+	if strings.Contains(s.orig, "\n") {
+		lineno := strings.Count(s.orig[:pos], "\n") + 1
+		colno := pos - strings.LastIndex(s.orig[:pos], "\n")
+
+		msg = fmt.Sprintf("%s (line %d, column %d)", msg, lineno, colno)
+	}
+
+	return errors.New(msg)
+}
+
+// errorh is equivalent to errorp for the current position.
+func (s *source) errorh(msg string) error {
+	return s.errorp(msg, s.tell())
+}
+
+// erroro is equivalent to errorp for the current position minus the given offset.
+func (s *source) erroro(msg string, offset int) error {
+	return s.errorp(msg, s.tell()-offset)
+}
+
+// clen returns the number of bytes of the given character.
+// This function can be used, to calculate the offset for an error.
+func (s *source) clen(c rune) int {
+	l := utf8.RuneLen(c)
+	if l < 0 {
+		l = 1
+	}
+
+	return l
 }

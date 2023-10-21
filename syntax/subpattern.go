@@ -279,9 +279,6 @@ func (w *subPatternWriter) writePattern(p *subPattern, parent *subPatternParam) 
 	}
 }
 
-// Flags supported by the Go regex library.
-const supportedFlags = FlagIgnoreCase | FlagMultiline | FlagDotAll
-
 // `inSet` can only be true, of called from `IN` node.
 func (w *subPatternWriter) writeNode(t *regexNode, ctx *subPatternContext) {
 	if w.replace(w, t, ctx) {

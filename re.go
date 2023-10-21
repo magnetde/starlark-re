@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	// Maximum cache size; 32 should be more than enough, because Starlark scripts stay relatively small.
-	maxRegexpCacheSize = 32
+	// Maximum cache size; 64 should be more than enough, because Starlark scripts stay relatively small.
+	maxRegexpCacheSize = 64
 
 	// Maximum possible value of a position.
 	// Should be used as the default value of `endpos`, because the position parameters always gets clamped.
@@ -645,7 +645,7 @@ func compilePattern(b *starlark.Builtin, p patternParam, flags uint32) (*Pattern
 
 // Pattern is a starlark representation of a compiled regular expression.
 type Pattern struct {
-	re      regexEngine
+	re      sre.Engine
 	pattern strOrBytes
 	flags   uint32
 
@@ -654,21 +654,8 @@ type Pattern struct {
 
 // newPattern creates a new pattern object, which is also a Starlark value.
 func newPattern(pattern strOrBytes, flags uint32, fallbackEnabled bool) (*Pattern, error) {
-	p := pattern.value
-	isStr := pattern.isString
-
-	// replace unicode patterns, that are supported by Pathon but not supported by Go
-	pp, err := sre.NewPreprocessor(p, isStr, flags)
+	re, err := sre.Compile(pattern.value, pattern.isString, flags, fallbackEnabled)
 	if err != nil {
-		return nil, err
-	}
-
-	re, err := compileRegex(pp, fallbackEnabled)
-	if err != nil {
-		if e, ok := strings.CutPrefix(err.Error(), "error parsing regexp: "); ok {
-			err = errors.New(e)
-		}
-
 		return nil, err
 	}
 
@@ -686,7 +673,7 @@ func newPattern(pattern strOrBytes, flags uint32, fallbackEnabled bool) (*Patter
 	o := Pattern{
 		re:        re,
 		pattern:   pattern,
-		flags:     pp.Flags(),
+		flags:     re.Flags(),
 		groupDict: groups,
 	}
 
@@ -706,7 +693,7 @@ func (p *Pattern) patternValue() starlark.String { return starlark.String(p.patt
 func (p *Pattern) String() string {
 	s := p.pattern
 
-	r := util.QuoteString(s.value, s.isString)
+	r := util.Repr(s.value, s.isString)
 	if len(r) > 200 {
 		r = r[:200]
 	}
@@ -1049,7 +1036,7 @@ var (
 func (m *Match) String() string { // TODO
 	g := m.groups[0]
 	return fmt.Sprintf("<re.match object; span=(%d, %d), match=%s>",
-		g.start, g.end, util.QuoteString(g.str, m.str.isString),
+		g.start, g.end, util.Repr(g.str, m.str.isString),
 	)
 }
 

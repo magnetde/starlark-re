@@ -7,18 +7,18 @@ import (
 	"unicode"
 )
 
-type Preprocessor struct {
+type preprocessor struct {
 	isStr bool
 	p     *subPattern
 }
 
-func NewPreprocessor(s string, isStr bool, flags uint32) (*Preprocessor, error) {
+func newPreprocessor(s string, isStr bool, flags uint32) (*preprocessor, error) {
 	sp, err := parse(s, isStr, flags)
 	if err != nil {
 		return nil, err
 	}
 
-	p := &Preprocessor{
+	p := &preprocessor{
 		isStr: isStr,
 		p:     sp,
 	}
@@ -26,16 +26,16 @@ func NewPreprocessor(s string, isStr bool, flags uint32) (*Preprocessor, error) 
 	return p, nil
 }
 
-func (p *Preprocessor) Flags() uint32 {
+func (p *preprocessor) flags() uint32 {
 	return p.p.state.flags
 }
 
-func (p *Preprocessor) GroupNames() map[string]int {
+func (p *preprocessor) groupNames() map[string]int {
 	return p.p.state.groupdict
 }
 
 // IsSupported checks, wether the current pattern is supported by the regexp engine of the Go stdlib.
-func (p *Preprocessor) IsSupported() bool {
+func (p *preprocessor) isSupported() bool {
 	if p.p.isUnsupported() {
 		return false
 	}
@@ -68,10 +68,10 @@ func isGoIdentifer(name string) bool {
 	return true
 }
 
-func (p *Preprocessor) String() string {
+func (p *preprocessor) stdPattern() string {
 	var b strings.Builder
 
-	flags := p.Flags()
+	flags := p.flags()
 	if flags&FlagIgnoreCase != 0 && flags&FlagASCII != 0 {
 		// Remove the ASCII flag if it is enabled together with the IGNORECASE flag,
 		// because the ignore case handling is done by the preprocessor.
@@ -128,12 +128,12 @@ func buildRange(s string) []rune {
 // If UNICODE is enabled, the sets \d, \D, \s, ... are replaced with an unicode counterpart.
 // If IGNORECASE and ASCII is enabled, every literal and range of ASCII characters is replaced with a character set,
 // that contains all characters, that match all cases of this character.
-func (p *Preprocessor) defaultReplacer(w *subPatternWriter, t *regexNode, ctx *subPatternContext) bool {
+func (p *preprocessor) defaultReplacer(w *subPatternWriter, t *regexNode, ctx *subPatternContext) bool {
 	if !p.isStr {
 		return false
 	}
 
-	flags := p.Flags()
+	flags := p.flags()
 	if ctx.group != nil {
 		addFlags := ctx.group.addFlags
 		delFlags := ctx.group.delFlags
@@ -246,7 +246,7 @@ func otherASCIICase(c rune) (rune, bool) {
 	return c, false
 }
 
-func (p *Preprocessor) FallbackString() (string, map[string]int) {
+func (p *preprocessor) fallbackPattern() (string, map[string]int) {
 	groupMapping := make(map[string]int)
 
 	var b strings.Builder
