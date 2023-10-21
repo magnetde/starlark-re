@@ -1,8 +1,6 @@
-package syntax
+package regex
 
-import (
-	"slices"
-)
+import "slices"
 
 // regexNode represents a node in the parsed regex tree.
 type regexNode struct {

@@ -7,7 +7,7 @@ import (
 
 	"go.starlark.net/starlark"
 
-	sre "github.com/magnetde/starlark-re/syntax"
+	"github.com/magnetde/starlark-re/regex"
 )
 
 type replacer interface {
@@ -21,7 +21,7 @@ type replacer interface {
 // If the replace string does not contain any references, the rule slice contains a single item,
 // representing a literal.
 type templateReplacer struct {
-	rules []sre.TemplateRule
+	rules []regex.TemplateRule
 	match bool
 }
 
@@ -106,19 +106,19 @@ func getReplacer(thread *starlark.Thread, p *Pattern, r starlark.Value) (replace
 }
 
 // if returned slice empty: contains no backreferences and is just a literal
-func newTemplateReplacer(r sre.Engine, repl string, isString bool) (replacer, error) {
-	var rules []sre.TemplateRule
+func newTemplateReplacer(r regex.Engine, repl string, isString bool) (replacer, error) {
+	var rules []regex.TemplateRule
 	withMatch := false
 
 	if !strings.ContainsRune(repl, '\\') { // check, if the template should be parsed
-		rules = []sre.TemplateRule{{
+		rules = []regex.TemplateRule{{
 			Literal: repl,
 			Group:   -1,
 		}}
 	} else {
 		var err error
 
-		rules, err = sre.ParseTemplate(r, repl, isString)
+		rules, err = regex.ParseTemplate(r, repl, isString)
 		if err != nil {
 			return nil, err
 		}

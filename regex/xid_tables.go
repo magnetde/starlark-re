@@ -1,4 +1,4 @@
-package syntax
+package regex
 
 // tableRange represents a range of Unicode codepoints.
 type tableRange struct {

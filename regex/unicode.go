@@ -1,4 +1,4 @@
-package syntax
+package regex
 
 // unicodeNames is a sorted list of unicode names.
 // The i-th name in "unicodeNames" corrensponds to the i-th character in "unicodeCodepoints".

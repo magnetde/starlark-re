@@ -12,7 +12,7 @@ import (
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
 
-	sre "github.com/magnetde/starlark-re/syntax"
+	"github.com/magnetde/starlark-re/regex"
 	"github.com/magnetde/starlark-re/util"
 )
 
@@ -59,22 +59,22 @@ type cacheValue struct {
 // NewModule creates a new re module with the given member dict.
 func NewModule(enableFallback bool) *Module {
 	members := starlark.StringDict{
-		"A":          makeFlags(sre.FlagASCII),
-		"ASCII":      makeFlags(sre.FlagASCII),
-		"DEBUG":      makeFlags(sre.FlagDebug),
-		"I":          makeFlags(sre.FlagIgnoreCase),
-		"IGNORECASE": makeFlags(sre.FlagIgnoreCase),
-		"L":          makeFlags(sre.FlagLocale),
-		"LOCALE":     makeFlags(sre.FlagLocale),
-		"M":          makeFlags(sre.FlagMultiline),
-		"MULTILINE":  makeFlags(sre.FlagMultiline),
+		"A":          makeFlags(regex.FlagASCII),
+		"ASCII":      makeFlags(regex.FlagASCII),
+		"DEBUG":      makeFlags(regex.FlagDebug),
+		"I":          makeFlags(regex.FlagIgnoreCase),
+		"IGNORECASE": makeFlags(regex.FlagIgnoreCase),
+		"L":          makeFlags(regex.FlagLocale),
+		"LOCALE":     makeFlags(regex.FlagLocale),
+		"M":          makeFlags(regex.FlagMultiline),
+		"MULTILINE":  makeFlags(regex.FlagMultiline),
 		"NOFLAG":     zeroInt,
-		"S":          makeFlags(sre.FlagDotAll),
-		"DOTALL":     makeFlags(sre.FlagDotAll),
-		"U":          makeFlags(sre.FlagUnicode),
-		"UNICODE":    makeFlags(sre.FlagUnicode),
-		"X":          makeFlags(sre.FlagVerbose),
-		"VERBOSE":    makeFlags(sre.FlagVerbose),
+		"S":          makeFlags(regex.FlagDotAll),
+		"DOTALL":     makeFlags(regex.FlagDotAll),
+		"U":          makeFlags(regex.FlagUnicode),
+		"UNICODE":    makeFlags(regex.FlagUnicode),
+		"X":          makeFlags(regex.FlagVerbose),
+		"VERBOSE":    makeFlags(regex.FlagVerbose),
 
 		"compile": starlark.NewBuiltin("compile", reCompile),
 		"purge":   starlark.NewBuiltin("purge", rePurge),
@@ -91,7 +91,7 @@ func NewModule(enableFallback bool) *Module {
 	}
 
 	if enableFallback {
-		members["FALLBACK"] = makeFlags(sre.FlagFallback)
+		members["FALLBACK"] = makeFlags(regex.FlagFallback)
 	}
 
 	r := Module{
@@ -645,7 +645,7 @@ func compilePattern(b *starlark.Builtin, p patternParam, flags uint32) (*Pattern
 
 // Pattern is a starlark representation of a compiled regular expression.
 type Pattern struct {
-	re      sre.Engine
+	re      regex.Engine
 	pattern strOrBytes
 	flags   uint32
 
@@ -654,7 +654,7 @@ type Pattern struct {
 
 // newPattern creates a new pattern object, which is also a Starlark value.
 func newPattern(pattern strOrBytes, flags uint32, fallbackEnabled bool) (*Pattern, error) {
-	re, err := sre.Compile(pattern.value, pattern.isString, flags, fallbackEnabled)
+	re, err := regex.Compile(pattern.value, pattern.isString, flags, fallbackEnabled)
 	if err != nil {
 		return nil, err
 	}
@@ -725,8 +725,8 @@ func (p *Pattern) writeflags(b *strings.Builder) {
 	flags := p.flags
 
 	// Omit re.UNICODE for valid string patterns.
-	if p.pattern.isString && flags&(sre.FlagLocale|sre.FlagUnicode|sre.FlagASCII) == sre.FlagUnicode {
-		flags &= ^sre.FlagUnicode
+	if p.pattern.isString && flags&(regex.FlagLocale|regex.FlagUnicode|regex.FlagASCII) == regex.FlagUnicode {
+		flags &= ^regex.FlagUnicode
 	}
 
 	if flags == 0 {
