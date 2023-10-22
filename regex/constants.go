@@ -8,7 +8,7 @@ import "math"
 
 // Possible flags for the flag parameter.
 // See also https://docs.python.org/3/library/re.html#flags.
-// Note, that the additional flag `FlagFallback` is specific for this Starlark implementation.
+// Note, that the additional flag `FlagFallback` is specific to this Starlark implementation.
 const (
 	_ uint32 = 1 << iota // TEMPLATE; unused
 	FlagIgnoreCase
@@ -26,19 +26,19 @@ const (
 )
 
 const (
-	// maxRepeat is the maximum repeat count for the parser; the regex engines may have an lower maximum repeat value.
+	// maxRepeat is the maximum repeat count for the parser; the regex engines may have a lower maximum repeat value.
 	maxRepeat = math.MaxInt
 
-	// maxGroups is used as the maximum group count of the parser; the regex engines may have an lower maximum group count.
+	// maxGroups is used as the maximum number of groups for the parser; the regex engines may have a lower maximum number of groups.
 	maxGroups = math.MaxInt / 2
 )
 
 // opcode is the type used for regex operators.
 type opcode uint32
 
-// Parsable regex operator.
-// Note, that not all of these operators are supported by both regex engines.
-// The following operators exists (ordered by opcode value):
+// Parsable regex operators.
+// Note that not all of these operators are supported by both regex engines.
+// The following operators exist (ordered by opcode value):
 //
 //   - FAILURE: empty negative lookups; `(?!)`
 //   - ANY: matches any character; `.`
@@ -83,7 +83,7 @@ const (
 	opPossessiveRepeat               // POSSESSIVE_REPEAT
 )
 
-// atcode is the type to specify positions.
+// atcode is the type used to specify positions.
 type atcode uint32
 
 // Available regex position.
@@ -96,7 +96,7 @@ const (
 	atEndString                     // AT_END_STRING
 )
 
-// catcode is the type to specify categories.
+// catcode is the type used to specify categories.
 type catcode uint32
 
 // Available regex category.

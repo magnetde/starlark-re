@@ -560,17 +560,17 @@ func regexpFinditer(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Value
 		return nil, err
 	}
 
-	var l []starlark.Value
+	var v starlark.Tuple
 
 	err = findMatches(p.re, str.value, pos, 0, func(match []int) error {
-		l = append(l, newMatch(p, str, match, 0, len(str.value)))
+		v = append(v, newMatch(p, str, match, pos, endpos))
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return starlark.NewList(l), nil
+	return &matchIter{v}, nil
 }
 
 // reSub return the text obtained by replacing the leftmost non-overlapping occurrences of the pattern in the text by the replacement repl,
@@ -1369,4 +1369,26 @@ func matchSpan(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwa
 	s := starlark.MakeInt(m.groups[i].start)
 	e := starlark.MakeInt(m.groups[i].end)
 	return starlark.Tuple{s, e}, nil
+}
+
+type matchIter struct {
+	values starlark.Tuple
+}
+
+var (
+	_ starlark.Value    = (*matchIter)(nil)
+	_ starlark.Iterable = (*matchIter)(nil)
+)
+
+func (it *matchIter) String() string {
+	return fmt.Sprintf("<%s object at %p>", it.Type(), it)
+}
+
+func (it *matchIter) Type() string          { return "match_iterator" }
+func (it *matchIter) Freeze()               {}
+func (it *matchIter) Truth() starlark.Bool  { return true }
+func (it *matchIter) Hash() (uint32, error) { return 0, fmt.Errorf("unhashable: %s", it.Type()) }
+
+func (it *matchIter) Iterate() starlark.Iterator {
+	return it.values.Iterate()
 }
