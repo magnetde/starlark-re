@@ -12,22 +12,22 @@ var (
 	hexChars      = "0123456789abcdef"
 )
 
-// Repr returns a representation of the string.
-// The parameter `isString` controls, whether the string should be interpreted as a string or a bytes object.
+// Repr returns a representation of an string.
+// The `isString` parameter determines whether the string should be treated as a string or a bytes object.
 func Repr(s string, isString bool) string {
 	return quoteString(s, isString, true, false)
 }
 
-// ASCII returns a representation of the string.
-// The parameter `isString` controls, whether the string should be interpreted as a string or a bytes object.
+// ASCII returns a string that escapes all non-printable or non-ASCII characters.
+// The `isString` parameter determines whether the string should be treated as a string or a bytes object.
 func ASCII(s string, isString bool) string {
 	return quoteString(s, isString, false, true)
 }
 
 // quoteString quotes a string and escapes non-printable characters.
-// The parameter `isString` controls, whether the string should be interpreted as a string or a bytes object.
-// If the parameter `bPrefix` is true, the prefix "b" is added to the beginning of the string.
-// if `ascii` is true, all non-ASCII characters are escaped.
+// The `isString` parameter determines whether the string should be interpreted as a string or a bytes object.
+// If `bPrefix` is set to true, an "b" prefix will be prepended to the string.
+// If `ascii` is true, all non-ASCII characters are escaped.
 func quoteString(s string, isString bool, bPrefix bool, ascii bool) string {
 	var b strings.Builder
 	b.Grow(len(s) + 3)
@@ -69,9 +69,9 @@ func quoteString(s string, isString bool, bPrefix bool, ascii bool) string {
 	return b.String()
 }
 
-// WriteEscapedByte escapes a byte and writes it to the string builder.
-// All special and non-ascii characters are escaped by default.
-// If `force` is true, c is also escaped.
+// WriteEscapedByte escapes a byte and writes it to the string builder,
+// escaping all special and non-ASCII characters by default.
+// Additionally, if `force` is true, the function will always escape the character 'c'.
 func WriteEscapedByte(w *strings.Builder, c byte, force bool) {
 	if force {
 		w.WriteByte('\\')

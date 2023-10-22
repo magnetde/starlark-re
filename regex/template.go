@@ -19,8 +19,8 @@ func (t *TemplateRule) IsLiteral() bool {
 	return t.Group < 0
 }
 
-// ParseTemplate parses a template string into a list of rules.
-// The list of rules is an alternating sequence of literal rules and group rules.
+// ParseTemplate converts a template string into a list of rules.
+// This list is an alternating sequence of literal rules and group rules.
 // For example, the template "x\1yz" results in the following list:
 //   - 0: literal "x"
 //   - 1: group 1

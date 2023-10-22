@@ -1,8 +1,8 @@
 package regex
 
-// unicodeNames is a sorted list of unicode names.
-// The i-th name in "unicodeNames" corrensponds to the i-th character in "unicodeCodepoints".
-// The character of a unicode names is determined with the function "lookupUnicodeName".
+// unicodeNames is a sorted list of names for corresponding unicode code points.
+// The i-th name in "unicodeNames" corresponds to the i-th character in "unicodeCodepoints".
+// The character of a unicode name can be retrieved using the "lookupUnicodeName" function.
 // See also https://github.com/justinmeza/lci/blob/main/unicode.c
 var unicodeNames = [...]string{
 	"AC CURRENT",

@@ -6,10 +6,10 @@ import "slices"
 type regexNode struct {
 	opcode opcode // regex operator
 	c      rune   // literals are the most common node, so add an extra field for them
-	params any    // additional parameters; may be nil
+	params any    // extra parameters; may be nil
 }
 
-// Extra types, when more then one field exists in the extra parameters:
+// Extra types, when more than one field exists in the extra parameters:
 
 // assertParams represents the parameters for the "ASSERT" and "ASSERT_NOT" operators.
 type assertParams struct {
@@ -45,7 +45,7 @@ type subPatternParam struct {
 	p        *subPattern
 }
 
-// equals checks, if two nodes are equal by checking its opcodes and its parameters.
+// equals checks, if two nodes are equal by comparing their opcodes and its parameters.
 func (t *regexNode) equals(o *regexNode) bool {
 	if t.opcode != o.opcode {
 		return false
@@ -95,7 +95,7 @@ func (t *regexNode) equals(o *regexNode) bool {
 	return false
 }
 
-// newEmptyNode creates a new node with the specified opcode and no additional parameters.
+// newEmptyNode creates a new node with a given opcode and no extra parameters.
 // Valid operators are FAILURE, ANY and NEGATE.
 func newEmptyNode(op opcode) *regexNode {
 	return &regexNode{

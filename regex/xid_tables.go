@@ -677,8 +677,8 @@ var xidStartTable = [...]tableRange{
 	{'\U00031350', '\U000323af'},
 }
 
-// xidContinueTable contains ranges of Unicode codepoints that may present the continuation of an identifier.
-// "xidContinueTable" is a superset of "xidStartTable".
+// xidContinueTable contains ranges of Unicode codepoints that may present the continuation of an identifier
+// and is a superset of xidStartTable.
 // See also https://unicode.org/reports/tr31/ (XID_Continue).
 var xidContinueTable = [...]tableRange{
 	{'\x30', '\x39'},

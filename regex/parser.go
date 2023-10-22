@@ -17,7 +17,7 @@ const (
 
 // state represents the current parser state.
 // It contains global flags, a mapping of group names to group indices, a list of open / closed groups,
-// a number of valid look behind groups and a mapping of groups to its positions in the pattern.
+// a number of valid look-behind groups, and a mapping of groups to their positions in the pattern.
 type state struct {
 	flags            uint32
 	groupdict        map[string]int
@@ -40,8 +40,8 @@ func (s *state) groups() int {
 	return len(s.groupsclosed)
 }
 
-// openGroup openes a new group. If the group has no name, the name value may be empty.
-// If the group name already exists or the number of groups exceeds the limit, an error is returned.
+// openGroup opens a new group. If the group has no name, the name value may be empty.
+// An error is returned if the group name already exists or if the number of groups exceeds the limit.
 func (s *state) openGroup(name string) (int, error) {
 	gid := s.groups()
 	s.groupsclosed = append(s.groupsclosed, false)
@@ -65,7 +65,7 @@ func (s *state) closeGroup(gid int) {
 	s.groupsclosed[gid] = true
 }
 
-// checkGroup returns true, if the specific group exists and is closed.
+// checkGroup returns true, if the specific group is both existing and closed.
 func (s *state) checkGroup(gid int) bool {
 	return gid < s.groups() && s.groupsclosed[gid]
 }
@@ -85,9 +85,9 @@ func (s *state) checkLookbehindGroup(gid int, src *source) error {
 	return nil
 }
 
-// Parse parses a regex pattern into a subpattern object.
-// The parser is a Go implementation of the parser used in the Python "re" module.
-// All errors fully correspond to the errors of the Python parser.
+// parse parses a regex pattern into a subpattern object.
+// The parser is based on the parser used in the Python "re" module,
+// with all errors corresponding to those of the Python parser.
 func parse(str string, isStr bool, flags uint32) (*subPattern, error) {
 	var s source
 	s.init(str, isStr)
@@ -144,11 +144,11 @@ func checkFlags(flags uint32, isStr bool) (uint32, error) {
 	return flags, nil
 }
 
-// parseSub parses a regex alternation and is the main function to parse a regex string.
-// If the alternation contains only one element, it is returned instead a subpattern, that contains the alternation.
-// Also, the alternation is simplified by extracting a common prefix and by replacing subpatterns with character sets,
-// if possible.
-// If the alternation contains multiple subpatterns, that are either single literals or character classes, the alternation
+// parseSub parses a regex alternation and is the primary parsing subroutine of "parse" to parse a regex string.
+// If the alternation only contains one element, it is returned instead of a subpattern containing the alternation.
+// Additionally, the alternation is simplified by extracting a common prefix and replacing subpatterns with character
+// sets when possible.
+// If the alternation contains multiple subpatterns, which are single literals or character classes, the alternation
 // is converted to a character set.
 func parseSub(s *source, state *state, verbose bool, nested int) (*subPattern, error) {
 	// parse an alternation: a|b|c
@@ -761,7 +761,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 
 // parseEscape parses an escape sequence.
 // This function is only called if the last character was a backslash.
-// Result regex nodes are from type LITERAL, GROUPREF, AT or IN.
+// The result regex nodes are of type LITERAL, GROUPREF, AT or IN.
 func parseEscape(s *source, state *state, inCls bool) (*regexNode, error) {
 	// handle escape code in expression
 
@@ -952,14 +952,14 @@ func parseEscape(s *source, state *state, inCls bool) (*regexNode, error) {
 }
 
 // parseIntRune parses a string representation of a number in the given base and returns the corresponding rune value.
-// It is assumed, that the string is valid for the base and does not overflow the uint32 type.
+// The input string is expected to be valid for the given base and should not overflow the int32 type.
 func parseIntRune(s string, base int) rune {
-	r, _ := strconv.ParseUint(s, base, 32)
+	r, _ := strconv.ParseInt(s, base, 32)
 	return rune(r)
 }
 
-// parseeFlags parses the regex flags in an group.
-// If no flags exist, the return value of "result" is false.
+// parseFlags parses the regex flags in an group.
+// If no flags where found, the return value of "result" is false.
 // An error is returned, if incompatible or unknown flags where found.
 func parseFlags(s *source, state *state, char rune) (addFlags, delFlags uint32, result bool, err error) {
 	var ok bool
@@ -1079,10 +1079,10 @@ func parseFlags(s *source, state *state, char rune) (addFlags, delFlags uint32, 
 	return
 }
 
-// unique removes duplicate regex nodes from the slice.
+// unique removes duplicate regex nodes from a slice.
 // This functions is a modified version of `slices.DeleteFunc`.
-// The worst case runtime is O(n^2), so maybe it would be better to use a hashset,
-// if the length of items exceeds a certain size.
+// If the length of the slice exceeds a certain size, it may be better to use a hashset
+// as the worst case runtime is O(n^2).
 // TODO: validate the performance bottleneck with benchmarks.
 func unique(s []*regexNode) []*regexNode {
 	// Don't start copying elements until we find one to delete.

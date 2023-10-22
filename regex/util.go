@@ -44,18 +44,18 @@ func isOctDigit(b rune) bool {
 }
 
 // toDigit returns the corresponding integer value of a character.
-// The rune must be a digit character in the set "0123456789".
+// The character must be a digit in the set "0123456789".
 func toDigit(b rune) int {
 	return int(b) - '0'
 }
 
 // digit returns the corresponding integer value of a byte representing a character.
-// The byte must be a digit character in the set "0123456789".
+// The byte must be a digit in the set "0123456789".
 func toDigitByte(b byte) int {
 	return toDigit(rune(b))
 }
 
-// isWhitespace checks if a given rune is a whitespace character.
+// isWhitespace checks if a given character is a whitespace character.
 func isWhitespace(c rune) bool {
 	switch c {
 	case ' ', '\t', '\n', '\r', '\v', '\f':
@@ -65,8 +65,8 @@ func isWhitespace(c rune) bool {
 	}
 }
 
-// lookupUnicodeName converts the unicode name to a corresponding character.
-// If no character was found for the name, the second return value is false.
+// lookupUnicodeName converts the unicode name into a corresponding character.
+// If the name does not match any character, the second return value is false.
 func lookupUnicodeName(name string) (rune, bool) {
 	name = strings.ToUpper(name)
 
@@ -78,8 +78,8 @@ func lookupUnicodeName(name string) (rune, bool) {
 	return unicodeCodepoints[i], true
 }
 
-// asciiEscape escapes a string by escaping all non-printable characters to its escape sequence
-// and by escaping all non-ascii bytes to an hexadecimal escape sequence.
+// asciiEscape replaces all non-printable characters in a string with their respective
+// escape sequence and replaces non-ascii bytes with an hexadecimal escape sequence.
 func asciiEscape(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
@@ -111,9 +111,9 @@ func isIdentifier(name string) bool {
 	return true
 }
 
-// inTable checks whether the character c is in the table of ranges.
-// The character c is considered to be in the table, if there exists a range in the table that includes c.
-// The table must be sorted and should be a slice of either "xidStartTable" or "xidContinueTable".
+// inTable verifies whether the character c is included in the table of ranges.
+// If c is covered by any range in the table, it is considered to be in the table.
+// The table needs to be sorted and should be a slice of either "xidStartTable" or "xidContinueTable".
 func inTable(c rune, table []tableRange) bool {
 	_, ok := slices.BinarySearchFunc(table, c, func(r tableRange, v rune) int {
 		if r.lo > c {
@@ -128,8 +128,8 @@ func inTable(c rune, table []tableRange) bool {
 	return ok
 }
 
-// isFlag checks if a given character is a valid regex flag.
-// The characters 'a', 'i', 'L', 'm', 's', 'u' and 'x' represent valid regex flags.
+// isFlag determines whether a character is a valid regex flag.
+// The characters 'a', 'i', 'L', 'm', 's', 'u' and 'x' are considered as valid regex flags.
 func isFlag(c rune) bool {
 	switch c {
 	case 'i', 'L', 'm', 's', 'x', 'a', 'u':
@@ -139,8 +139,8 @@ func isFlag(c rune) bool {
 	}
 }
 
-// getFlag converts a flag character to the corresponding integer flag value.
-// If the character is not a valid flag character, it returns 0.
+// getFlag converts a flag character to its corresponding integer value.
+// If the character is invalid for a flag, the function will return 0.
 func getFlag(c rune) uint32 {
 	switch c {
 	// standard flags
@@ -164,8 +164,8 @@ func getFlag(c rune) uint32 {
 	}
 }
 
-// isRepeatCode checks if the opcode represents a repeat operator.
-// Valid repeat operators are "MIN_REPEAT", "MAX_REPEAT" or "POSSESSIVE_REPEAT".
+// isRepeatCode checks if the opcode represents a repetition operator.
+// Valid repeating operators are "MIN_REPEAT", "MAX_REPEAT" or "POSSESSIVE_REPEAT".
 func isRepeatCode(o opcode) bool {
 	switch o {
 	case opMinRepeat, opMaxRepeat, opPossessiveRepeat:
