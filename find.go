@@ -17,10 +17,6 @@ func findMatch(r regex.Engine, s string, pos int, longest bool) ([]int, error) {
 // Is necessary because python includes empty matches right after a previous match.
 // The deliver function must not modify the match.
 func findMatches(r regex.Engine, s string, pos int, n int, deliver func(a []int) error) error {
-	if n <= 0 {
-		n = len(s) + 1
-	}
-
 	in := r.BuildInput(s)
 
 	end := len(s)
@@ -33,7 +29,7 @@ func findMatches(r regex.Engine, s string, pos int, n int, deliver func(a []int)
 	firstPass := true
 
 	var dstCap [4]int
-	for i := 0; i < n && pos <= end; {
+	for i := 0; (n <= 0 || i < n) && pos <= end; {
 		a, err := in.Find(pos, !firstPass, dstCap[:0])
 		if err != nil {
 			return err

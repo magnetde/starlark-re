@@ -45,9 +45,9 @@ func (r *templateReplacer) replace(m *Match) (string, error) {
 		if t.IsLiteral() {
 			b.WriteString(t.Literal)
 		} else {
-			g := m.groups[t.Group]
+			g := &m.groups[t.Group]
 			if !g.empty() {
-				b.WriteString(g.str)
+				b.WriteString(m.groupStr(g))
 			}
 		}
 	}

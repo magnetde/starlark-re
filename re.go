@@ -961,6 +961,7 @@ type Match struct {
 	pattern *Pattern
 	str     strOrBytes
 
+	// first group: whole match
 	groups []group
 
 	pos       int
@@ -972,11 +973,10 @@ type Match struct {
 type group struct {
 	start int
 	end   int
-	str   string
 }
 
 func (g *group) empty() bool {
-	return g.start < 0 && g.end < 0
+	return g.start < 0 || g.end < 0
 }
 
 // newMatch creates a new match object.
@@ -998,17 +998,13 @@ func newMatch(p *Pattern, str strOrBytes, a []int, pos, endpos int) *Match {
 				end:   e,
 			}
 
-			if s >= 0 && e >= 0 {
-				// determine the index of the last group
-				if i > 0 && e > lastIndexEnd {
-					lastIndex = i
-					lastIndexEnd = e
-				}
-
-				g.str = str.value[s:e]
-			}
-
 			groups = append(groups, g)
+
+			if i > 0 && !g.empty() && e > lastIndexEnd {
+				// determine the index of the last group
+				lastIndex = i
+				lastIndexEnd = e
+			}
 		}
 	}
 
@@ -1033,11 +1029,15 @@ var (
 	_ starlark.Comparable = (*Match)(nil)
 )
 
-func (m *Match) String() string { // TODO
+func (m *Match) String() string {
 	g := m.groups[0]
 	return fmt.Sprintf("<re.match object; span=(%d, %d), match=%s>",
-		g.start, g.end, util.Repr(g.str, m.str.isString),
+		g.start, g.end, util.Repr(m.groupStr(&g), m.str.isString),
 	)
+}
+
+func (m *Match) groupStr(g *group) string {
+	return m.str.value[g.start:g.end]
 }
 
 func (m *Match) Type() string         { return "match" }
@@ -1053,7 +1053,7 @@ func (m *Match) Hash() (uint32, error) {
 		if g.empty() {
 			tmp = 0
 		} else {
-			tmp, _ = starlark.String(g.str).Hash() // string type; no error possible
+			tmp, _ = starlark.String(m.groupStr(&g)).Hash() // string type; no error possible
 			tmp ^= uint32(g.start) ^ uint32(g.end)
 		}
 
@@ -1189,7 +1189,7 @@ func (m *Match) group(v starlark.Value) (starlark.Value, error) {
 			return starlark.None, nil
 		}
 
-		return m.str.asType(g.str), nil
+		return m.str.asType(m.groupStr(g)), nil
 	}
 
 	return nil, errors.New("IndexError: no such group")
@@ -1278,15 +1278,13 @@ func matchGroups(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, k
 
 	result := make(starlark.Tuple, 0, len(m.groups)-1)
 
-	for _, group := range m.groups[1:] {
-		var g starlark.Value
-		if group.empty() {
-			g = defaultValue
-		} else {
-			g = m.str.asType(group.str)
+	for _, g := range m.groups[1:] {
+		gv := defaultValue
+		if !g.empty() {
+			gv = m.str.asType(m.groupStr(&g))
 		}
 
-		result = append(result, g)
+		result = append(result, gv)
 	}
 
 	return result, nil
