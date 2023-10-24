@@ -6,12 +6,13 @@
 
 
 # Add dummy assignments to fix Python warnings.
-# type: ignore
-re = re
-same = same
-measure = measure
-trycatch = trycatch
-fail = fail
+
+re = re # type: ignore
+same = same # type: ignore
+measure = measure # type: ignore
+trycatch = trycatch # type: ignore
+fail = fail # type: ignore
+capture_output = capture_output # type: ignore
 
 # All assertion functions
 
@@ -59,11 +60,15 @@ def assertRegex(v, r, msg=None):
 
 def assertRaises(v, e=None, msg=None):
     err = trycatch(v)[1]
-    if err == None or (e != None and err != e): assertionFail(msg, "%s not raised" % e)
+    if err == None or (e != None and err != e):
+        if e == None: e = "error"
+        assertionFail(msg, "%s not raised" % e)
 
 def assertRaisesRegex(v, e=None, msg=None):
     err = trycatch(v)[1]
-    if err == None or not re.search(e, err): assertionFail(msg, "%s not raised" % e)
+    if err == None or not re.search(e, err):
+        if e == None: e = "error"
+        assertionFail(msg, "%s not raised" % e)
 
 # replacement for str % (...)
 def format(s, *args):
@@ -2143,10 +2148,11 @@ def test_ascii_and_unicode_flag():
     pat = re.compile(r'(?a)\w')
     assertIsNone(pat.match('\u00E0'))
     # Bytes patterns
-    pat = re.compile(b'\xc0', re.ASCII | re.IGNORECASE)
-    assertIsNone(pat.match(b'\xe0'))
-    pat = re.compile(b'\\w', re.ASCII)
-    assertIsNone(pat.match(b'\xe0'))
+    for flags in [re.ASCII]:
+        pat = re.compile(b'\xc0', flags | re.IGNORECASE)
+        assertIsNone(pat.match(b'\xe0'))
+        pat = re.compile(b'\\w', flags)
+        assertIsNone(pat.match(b'\xe0'))
     # Incompatibilities
     assertRaises(lambda: re.compile(b'\\w', re.UNICODE))
     assertRaises(lambda: re.compile(b'(?u)\\w'))
@@ -2745,7 +2751,7 @@ def test_bug_gh100061():
     assertEqual(re.match('(?>(?:.(?!D))?)', 'CDE').span(), (0, 0))
     # SKIP: assertEqual(re.match('(?:.(?!D))?+', 'CDE').span(), (0, 0))
     assertEqual(re.match('(?>(?:.(?!D)){1,3})', 'ABCDE').span(), (0, 2))
-    # assertEqual(re.match('(?:.(?!D)){1,3}+', 'ABCDE').span(), (0, 2))
+    # SKIP: aassertEqual(re.match('(?:.(?!D)){1,3}+', 'ABCDE').span(), (0, 2))
     # gh-106052
     assertEqual(re.match("(?>(?:ab?c)+)", "aca").span(), (0, 2))
     # SKIP: assertEqual(re.match("(?:ab?c)++", "aca").span(), (0, 2))
@@ -2758,6 +2764,40 @@ def test_bug_gh100061():
 
 def test_fail():
     assertEqual(re.search(r'12(?!)|3', '123')[0], '3')
+
+def get_debug_out(pat):
+    return capture_output(lambda: re.compile(pat, re.DEBUG))
+
+def test_debug_flag():
+    pat = r'(\.)(?:[ch]|py)(?(1)$|: )'
+    dump = '''\
+SUBPATTERN 1 0 0
+  LITERAL 46
+BRANCH
+  IN
+    LITERAL 99
+    LITERAL 104
+OR
+  LITERAL 112
+  LITERAL 121
+GROUPREF_EXISTS 1
+  AT AT_END
+ELSE
+  LITERAL 58
+  LITERAL 32
+'''
+    assertEqual(get_debug_out(pat), dump)
+    # Debug output is output again even a second time (bypassing
+    # the cache -- issue #20426).
+    assertEqual(get_debug_out(pat), dump)
+
+def test_atomic_group():
+    assertEqual(get_debug_out(r'(?>ab?)'), '''\
+ATOMIC_GROUP
+  LITERAL 97
+  MAX_REPEAT 0 1
+    LITERAL 98
+''')
 
 def check(pattern, expected):
     assertEqual(repr(re.compile(pattern)), expected)
@@ -2830,6 +2870,17 @@ def test_flags_repr():
     assertEqual(repr(~re.I), "-3")
     assertEqual(repr(~(re.I|re.S|re.X)), "-83")
     assertEqual(repr(~(re.I|re.S|re.X|(1<<20))), "-1048659")
+
+def test_repeat_minmax_overflow_maxrepeat():
+    MAXREPEAT = 1000
+    string = "x" * (MAXREPEAT // 2)
+    assertIsNone(re.match(r".{%d}" % MAXREPEAT, string))
+    assertEqual(re.match(r".{,%d}" % MAXREPEAT, string).span(),
+                (0, len(string)))
+    assertIsNone(re.match(r".{%d,}?" % MAXREPEAT, string))
+    assertRaises(lambda: re.compile(r".{%d}" % (MAXREPEAT + 1)))
+    assertRaises(lambda: re.compile(r".{,%d}" % (MAXREPEAT + 1)))
+    assertRaises(lambda: re.compile(r".{%d,}?" % (MAXREPEAT + 1)))
 
 def test_re_benchmarks():
     're_tests benchmarks'
@@ -3052,5 +3103,6 @@ test_locale()
 test_quotes()
 test_long_pattern()
 test_flags_repr()
+test_repeat_minmax_overflow_maxrepeat()
 test_re_benchmarks()
 test_re_tests()

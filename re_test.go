@@ -3,6 +3,7 @@ package re
 import (
 	_ "embed"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,10 +16,11 @@ var reScript string
 
 func TestRe(t *testing.T) {
 	asserts := map[string]func(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error){
-		"same":     sameFunc,
-		"measure":  measureTime,
-		"eval":     evalFunc,
-		"trycatch": tryCatchFunc,
+		"same":           sameFunc,
+		"measure":        measureTime,
+		"eval":           evalFunc,
+		"trycatch":       tryCatchFunc,
+		"capture_output": captureOutput,
 	}
 
 	predeclared := starlark.StringDict{
@@ -140,4 +142,28 @@ func tryCatchFunc(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tu
 	}
 
 	return starlark.Tuple{res, starlark.None}, nil
+}
+
+func captureOutput(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	var fn starlark.Callable
+	if err := starlark.UnpackArgs(b.Name(), args, kwargs, "fn", &fn); err != nil {
+		return nil, err
+	}
+
+	oldPrint := thread.Print
+
+	var output strings.Builder
+	thread.Print = func(thread *starlark.Thread, msg string) {
+		output.WriteString(msg)
+		output.WriteByte('\n')
+	}
+
+	_, err := fn.CallInternal(thread, nil, nil)
+	thread.Print = oldPrint
+
+	if err != nil {
+		return nil, err
+	}
+
+	return starlark.String(output.String()), nil
 }
