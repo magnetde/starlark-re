@@ -9,25 +9,29 @@ import (
 
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
+
+	re "github.com/magnetde/starlark-re"
 )
 
 //go:embed re_test.py
 var reScript string
 
+// TestRe is the main function for regex tests.
+// Tests must be defined within the `re_test.py` file and are interpreted here.
 func TestRe(t *testing.T) {
-	asserts := map[string]func(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error){
-		"same":           sameFunc,
-		"measure":        measureTime,
-		"eval":           evalFunc,
-		"trycatch":       tryCatchFunc,
+	predeclared := starlark.StringDict{
+		"re": re.NewModule(),
+	}
+
+	helpers := map[string]func(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error){
+		"same":           sameHelper,
+		"measure":        measureHelper,
+		"eval":           evalHelper,
+		"trycatch":       tryCatchHelper,
 		"capture_output": captureOutput,
 	}
 
-	predeclared := starlark.StringDict{
-		"re": NewModule(true),
-	}
-
-	for name, fn := range asserts {
+	for name, fn := range helpers {
 		predeclared[name] = starlark.NewBuiltin(name, fn)
 	}
 
@@ -59,7 +63,8 @@ func TestRe(t *testing.T) {
 	}
 }
 
-func sameFunc(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+// sameHelper tests, whether two Starlark values are identical.
+func sameHelper(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var x, y starlark.Value
 	if err := starlark.UnpackPositionalArgs(b.Name(), args, kwargs, 2, &x, &y); err != nil {
 		return nil, err
@@ -68,7 +73,8 @@ func sameFunc(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwar
 	return starlark.Bool(x == y), nil
 }
 
-func measureTime(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+// measureHelper measures the duration of a call to a Starlark function in seconds.
+func measureHelper(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var fn starlark.Callable
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs, "fn", &fn); err != nil {
 		return nil, err
@@ -84,7 +90,8 @@ func measureTime(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tup
 	return starlark.Float(elapsed.Seconds()), nil
 }
 
-func evalFunc(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+// evalHelper implements the `eval` builtin function from Python in Starlark.
+func evalHelper(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var (
 		code string
 		vars *starlark.Dict
@@ -101,11 +108,9 @@ func evalFunc(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple,
 
 		var k starlark.Value
 		for iter.Next(&k) {
-			v, ok, err := vars.Get(k)
-			if err != nil {
+			if v, ok, err := vars.Get(k); err != nil {
 				return nil, err
-			}
-			if ok {
+			} else if ok {
 				if s, ok := k.(starlark.String); ok {
 					env[string(s)] = v
 				} else {
@@ -126,7 +131,11 @@ func evalFunc(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple,
 	return starlark.EvalOptions(&opts, thread, "eval", code, env)
 }
 
-func tryCatchFunc(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+// tryCatchHelper is used to call a Starlark function without raising any errors that result in
+// terminating the Starlark script. The function returns a tuple, `(v, e)`, where `v` is the
+// returned value of the function and `e` is the error raised during execution. Exactly one of
+// these two values is `None`.
+func tryCatchHelper(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	if len(args) < 1 {
 		return nil, fmt.Errorf("%s: got %d arguments, want at least 1", b.Name(), len(args))
 	}
@@ -144,6 +153,8 @@ func tryCatchFunc(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tu
 	return starlark.Tuple{res, starlark.None}, nil
 }
 
+// captureOutput calls a Starlark function and captures its output.
+// The output is then returned as a string.
 func captureOutput(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var fn starlark.Callable
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs, "fn", &fn); err != nil {
