@@ -400,7 +400,7 @@ func writeSubranges(w *subPatternWriter, lo, hi rune) bool {
 	lo2 := max(lo, subr2Start)
 	hi4 := min(hi, subr4End)
 
-	// If the two subranges (2) and (4) overlap, ignoring the case, then the
+	// If the two subranges (2) and (4) overlap (ignoring the case), then the
 	// ranges 'A' - 'Z' and 'a' - 'z' must be added to the regex pattern.
 	if lo2 <= upper(hi4) {
 		writeRange(w, 'A', 'Z')
@@ -467,12 +467,14 @@ func subrangeIndex(c rune) int {
 
 // fallbackPattern builds a preprocessed regex pattern compatible with the `regexp2.Regexp`.
 // This pattern is almost identical to the one produced by `stdPattern`, with the exception of not
-// using any unicode classes (`\p{...}`) and renaming all captured groups to preserve their order.
-// Also, a mapping of new group names to group indices is returned.
-func (p *preprocessor) fallbackPattern() (string, map[string]int) {
-	groupMapping := make(map[string]int)
-
-	s := p.p.toString(p.isStr, func(w *subPatternWriter, n *regexNode, ctx *subPatternContext) bool {
+// using any unicode classes (`\p{...}`) and not naming any captured groups to preserve their order.
+// This is required because `regexp2.Regexp` (and also .NET) orders capture groups from left to right
+// based on the order of the opening parentheses. However, named capture groups are always ordered
+// last, after the non-named capture groups. This results in a different order of capture groups
+// between Python and `regexp.Regexp2`. So, all capture group names must be omitted from the regex
+// pattern.
+func (p *preprocessor) fallbackPattern() string {
+	return p.p.toString(p.isStr, func(w *subPatternWriter, n *regexNode, ctx *subPatternContext) bool {
 		if p.defaultReplacer(w, n, ctx, false) {
 			return true
 		}
@@ -487,12 +489,7 @@ func (p *preprocessor) fallbackPattern() (string, map[string]int) {
 				return false
 			}
 
-			g := fmt.Sprintf("g%02d", p.group) // every group gets a unique group name to keep its order
-			groupMapping[g] = p.group          // store the group position (determined from the parser) together with its new name
-
-			w.WriteString("(?<") // No ? before P
-			w.WriteString(g)
-			w.WriteByte('>')
+			w.WriteByte('(')
 			if p.p.len() > 0 {
 				w.writePattern(p.p, &p)
 			}
@@ -503,6 +500,4 @@ func (p *preprocessor) fallbackPattern() (string, map[string]int) {
 
 		return false
 	})
-
-	return s, groupMapping
 }

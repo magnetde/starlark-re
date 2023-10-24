@@ -3,10 +3,17 @@ package regex
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/magnetde/starlark-re/util"
+)
+
+// Constants for detecting overflow in `nextInt()` function.
+const (
+	maxValueDiv10 = math.MaxInt / 10
+	maxValueMod10 = math.MaxInt % 10
 )
 
 // source represents a reader to read the regex string.
@@ -111,7 +118,7 @@ func (s *source) match(c rune) bool {
 // Afterwards, the cursor is moved to the first non-numeric character.
 // If the integer exceeds the maximum value of type `int`, an error is returned.
 func (s *source) nextInt() (int, bool, error) {
-	var i, prev int
+	i := 0
 	found := false
 
 	for len(s.cur) > 0 {
@@ -119,11 +126,14 @@ func (s *source) nextInt() (int, bool, error) {
 			break
 		}
 
-		prev = i
-		i = 10*i + toDigitByte(s.cur[0])
-		if i < prev {
+		d := toDigitByte(s.cur[0])
+
+		if i > maxValueDiv10 || (i == maxValueDiv10 && d > maxValueMod10) {
 			return 0, false, errors.New("overflow error")
 		}
+
+		i *= 10
+		i += d
 
 		found = true
 		s.cur = s.cur[1:]
