@@ -8,30 +8,38 @@ import (
 	"unicode/utf8"
 )
 
+// subPattern is a type, that represents a regex subpattern.
+// It contains a list of regex nodes that represents a sequence of subpatterns.
 type subPattern struct {
 	state *state
 	data  []*regexNode
 }
 
+// newSubpattern creates a new empty subpattern.
 func newSubpattern(state *state) *subPattern {
 	return &subPattern{
 		state: state,
 	}
 }
 
-func (p *subPattern) append(t *regexNode) {
-	p.data = append(p.data, t)
+// append adds a new regex node to the sequence of regex nodes of this subpattern.
+func (p *subPattern) append(n *regexNode) {
+	p.data = append(p.data, n)
 }
 
+// len returns the number of regex nodes of this subpattern.
 func (p *subPattern) len() int {
 	return len(p.data)
 }
 
+// get returns the i-th regex node of this subpattern.
 func (p *subPattern) get(i int) *regexNode {
 	i = p.index(i)
 	return p.data[i]
 }
 
+// index returns `i` if it is a non-negative index, otherwise it will return `p.len() + i`.
+// This allows, to pass negative indices.
 func (p *subPattern) index(i int) int {
 	if i < 0 {
 		i += len(p.data)
@@ -39,23 +47,25 @@ func (p *subPattern) index(i int) int {
 	return i
 }
 
+// del deletes the i-th item of this subpattern.
 func (p *subPattern) del(i int) {
 	i = p.index(i)
 	p.data = slices.Delete(p.data, i, i+1)
 }
 
-func (p *subPattern) set(i int, t *regexNode) {
+// set sets the i-th item of this subpattern to `t`.
+func (p *subPattern) set(i int, n *regexNode) {
 	i = p.index(i)
-	p.data[i] = t
+	p.data[i] = n
 }
 
+// replace replaces the i-th item of this subpattern with all nodes of subpattern `sp`.
 func (p *subPattern) replace(i int, sp *subPattern) {
 	i = p.index(i)
-	p.data = slices.Delete(p.data, i, i+1)
-	p.data = slices.Insert(p.data, i, sp.data...)
+	p.data = slices.Replace(p.data, i, i+1, sp.data...)
 }
 
-// isUnsupported returns, whether the subpattern is unsupported by the std regexp engine.
+// isUnsupported returns, whether the subpattern is not supported by the regexp engine `regex.Regexp`.
 func (p *subPattern) isUnsupported() bool {
 	for _, item := range p.data {
 		if isUnsupported(item) {
@@ -66,8 +76,11 @@ func (p *subPattern) isUnsupported() bool {
 	return false
 }
 
-func isUnsupported(t *regexNode) bool {
-	switch t.opcode {
+// isUnsupported returns, whether the regex node is not supported by the regexp engine `regex.Regexp`.
+// Currently, the following regex node types are not supported:
+// ASSERT, ASSERT_NOT, GROUPREF, GROUPREF_EXISTS, ATOMIC_GROUP, POSSESSIVE_REPEAT, FAILURE and AT with the AT_END_STRING position.
+func isUnsupported(n *regexNode) bool {
+	switch n.opcode {
 	case opAssert, opAssertNot,
 		opGroupref, opGrouprefExists,
 		opAtomicGroup,
@@ -75,13 +88,13 @@ func isUnsupported(t *regexNode) bool {
 		opFailure:
 		return true
 	case opAt:
-		c := t.params.(atcode)
+		c := n.params.(atcode)
 
 		if c == atEndString {
 			return true
 		}
 	case opBranch:
-		items := t.params.([]*subPattern)
+		items := n.params.([]*subPattern)
 
 		for _, item := range items {
 			if item.isUnsupported() {
@@ -89,11 +102,11 @@ func isUnsupported(t *regexNode) bool {
 			}
 		}
 	case opMinRepeat, opMaxRepeat:
-		p := t.params.(repeatParams)
+		p := n.params.(repeatParams)
 
 		return p.item.isUnsupported()
 	case opSubpattern:
-		p := t.params.(subPatternParam)
+		p := n.params.(subPatternParam)
 
 		return p.p.isUnsupported()
 	}
@@ -101,29 +114,28 @@ func isUnsupported(t *regexNode) bool {
 	return false
 }
 
-func (p *subPattern) dump(print func(s string)) {
+// dump returns debug information about the compiled expression.
+func (p *subPattern) dump() string {
 	var b strings.Builder
 	p.dumpPattern(&b, 0)
-
-	if print == nil {
-		fmt.Print(b.String())
-	} else {
-		print(b.String())
-	}
+	return strings.TrimRight(b.String(), "\n ") // trim newlines and spaces at the end
 }
 
+// dumpPattern writes the debug information of this subpattern to the string builder.
+// The `level` parameter is used to indent the debug information.
 func (p *subPattern) dumpPattern(b *strings.Builder, level int) {
 	for _, v := range p.data {
 		op := v.opcode
 
 		b.WriteString(strings.Repeat("  ", level))
 		b.WriteString(op.String())
-		dumpNode(v, b, level)
+		dumpNode(b, v, level)
 	}
 }
 
-func dumpNode(t *regexNode, b *strings.Builder, level int) {
-	printr := func(v ...any) {
+// dumpNode writes the debug information of the parameters, excluding the opcode for node 't', to the string builder.
+func dumpNode(b *strings.Builder, n *regexNode, level int) {
+	write := func(v ...any) {
 		for i, a := range v {
 			if i > 0 {
 				b.WriteByte(' ')
@@ -132,88 +144,88 @@ func dumpNode(t *regexNode, b *strings.Builder, level int) {
 		}
 	}
 
-	print := func(v ...any) {
-		printr(v...)
+	writeln := func(v ...any) {
+		write(v...)
 		b.WriteByte('\n')
 	}
 
-	printParams := func(av ...any) {
+	writeParams := func(av ...any) {
 		nl := false
 		for _, a := range av {
 			if sp, ok := a.(*subPattern); ok {
 				if !nl {
-					print()
+					writeln()
 				}
 
 				sp.dumpPattern(b, level+1)
 				nl = true
 			} else {
 				if !nl {
-					printr(" ")
+					write(" ")
 				}
-				printr(a)
+				write(a)
 				nl = false
 			}
 		}
 		if !nl {
-			print()
+			writeln()
 		}
 	}
 
-	switch t.opcode {
+	switch n.opcode {
 	case opAssert, opAssertNot:
-		p := t.params.(assertParams)
-		printParams(p.dir, p.p)
+		p := n.params.(assertParams)
+		writeParams(p.dir, p.p)
 	case opAny:
-		printParams("None")
+		writeParams("None")
 	case opAt:
-		at := t.params.(atcode)
-		printParams(at.String())
+		at := n.params.(atcode)
+		writeParams(at.String())
 	case opBranch:
-		items := t.params.([]*subPattern)
+		items := n.params.([]*subPattern)
 
-		print()
+		writeln()
 		for i, a := range items {
 			if i != 0 {
-				print(strings.Repeat("  ", level) + "OR")
+				writeln(strings.Repeat("  ", level) + "OR")
 			}
 			a.dumpPattern(b, level+1)
 		}
 	case opCategory: // nodes of type "CATEGORY" always appear in "IN" nodes
 	case opGroupref:
-		group := t.params.(int)
-		printParams(group)
+		group := n.params.(int)
+		writeParams(group)
 	case opGrouprefExists:
-		p := t.params.(grouprefExParam)
-		print("", p.condgroup)
+		p := n.params.(grouprefExParam)
+		writeln("", p.condgroup)
 
 		p.itemYes.dumpPattern(b, level+1)
 		if p.itemNo != nil {
-			print(strings.Repeat("  ", level) + "ELSE")
+			writeln(strings.Repeat("  ", level) + "ELSE")
 			p.itemNo.dumpPattern(b, level+1)
 		}
 	case opIn:
-		items := t.params.([]*regexNode)
-		print()
+		items := n.params.([]*regexNode)
+		writeln()
 
 		// members in items are either of type LITERAL, RANGE or CATEGORY
 		for _, v := range items {
-			printr(strings.Repeat("  ", level+1) + v.opcode.String() + " ")
+			write(strings.Repeat("  ", level+1) + v.opcode.String() + " ")
 			switch v.opcode {
 			case opLiteral:
-				print(v.c)
+				writeln(v.c)
 			case opRange:
 				p := v.params.(rangeParams)
-				print(fmt.Sprintf("(%d, %d)", p.lo, p.hi))
+				writeln(fmt.Sprintf("(%d, %d)", p.lo, p.hi))
 			case opCategory:
 				p := v.params.(catcode)
-				print(p.String())
+				writeln(p.String())
 			}
 		}
 	case opLiteral, opNotLiteral:
-		print("", t.c)
+		writeln("", n.c)
 	case opMinRepeat, opMaxRepeat, opPossessiveRepeat:
-		p := t.params.(repeatParams)
+		p := n.params.(repeatParams)
 
 		var maxval string
 		if p.max != maxRepeat {
@@ -221,12 +233,12 @@ func dumpNode(t *regexNode, b *strings.Builder, level int) {
 		} else {
 			maxval = "MAXREPEAT"
 		}
-		printParams(p.min, maxval, p.item)
+		writeParams(p.min, maxval, p.item)
 	case opRange:
-		p := t.params.(rangeParams)
-		printParams(p.lo, p.hi)
+		p := n.params.(rangeParams)
+		writeParams(p.lo, p.hi)
 	case opSubpattern:
-		p := t.params.(subPatternParam)
+		p := n.params.(subPatternParam)
 
 		var group string
 		if p.group >= 0 {
@@ -234,18 +246,23 @@ func dumpNode(t *regexNode, b *strings.Builder, level int) {
 		} else {
 			group = "None"
 		}
-		printParams(group, p.addFlags, p.delFlags, p.p)
+		writeParams(group, p.addFlags, p.delFlags, p.p)
 	case opAtomicGroup:
-		p := t.params.(*subPattern)
+		p := n.params.(*subPattern)
 
-		print()
+		writeln()
 		p.dumpPattern(b, level+1)
 	case opFailure:
-		print()
+		writeln()
 	}
 }
 
-func (p *subPattern) string(isStr bool, replace func(w *subPatternWriter, t *regexNode, ctx *subPatternContext) bool) string {
+// toString converts a subpattern into a regex pattern string that is compatible with the Python regex engine.
+// The replace function is used to change subelements of the pattern and cannot be null.
+// If the replace function rewrites a subelement, it must return true and the subelement is then ignored by this function.
+// The parameter `w` of the replace function is used to build the pattern string.
+// The current regex node is represented by the parameter 't'. 'ctx' is the context of the node 't'.
+func (p *subPattern) toString(isStr bool, replace func(w *subPatternWriter, n *regexNode, ctx *subPatternContext) bool) string {
 	w := subPatternWriter{
 		isStr:   isStr,
 		replace: replace,
@@ -255,18 +272,31 @@ func (p *subPattern) string(isStr bool, replace func(w *subPatternWriter, t *reg
 	return w.String()
 }
 
+// subPatternWriter is a type to write the regex pattern.
+// It uses a `strings.Builder` and provides functions to write subpatterns, regex nodes, integers, and literals.
 type subPatternWriter struct {
 	strings.Builder
 	isStr   bool
-	replace func(w *subPatternWriter, t *regexNode, ctx *subPatternContext) bool
+	replace func(w *subPatternWriter, n *regexNode, ctx *subPatternContext) bool
 }
 
+// subPatternContext describes the content of the current regex node.
+// The field `hasSiblings` indicates whether the current regex node has other siblings.
+// This may be necessary to rewrite the negated character class \D for unicode digits differently
+// (see `defaultReplacer()` in preprocessor.go).
+// The field `inSet` describes whether the current regex node is in a character set (a node of type IN).
+// This may be necessary to handle literals inside and outside of sets differently.
+// The last field `group` is the group of the current regex node, making it possible to handle regex nodes
+// differently based on the flags of the current group. The group may be nil.
 type subPatternContext struct {
 	hasSiblings bool
 	inSet       bool
 	group       *subPatternParam
 }
 
+// writePattern writes the subpattern to the subpattern writer.
+// The `parent` parameter specifies the current group of the subpattern.
+// The parent changes with each regex node of type `SUBPATTERN`.
 func (w *subPatternWriter) writePattern(p *subPattern, parent *subPatternParam) {
 	ctx := subPatternContext{
 		hasSiblings: len(p.data) > 1,
@@ -279,24 +309,27 @@ func (w *subPatternWriter) writePattern(p *subPattern, parent *subPatternParam) 
 	}
 }
 
-// `inSet` can only be true, of called from `IN` node.
-func (w *subPatternWriter) writeNode(t *regexNode, ctx *subPatternContext) {
-	if w.replace(w, t, ctx) {
+// writeNodes writes the regex node to the subpattern writer.
+// Initially, the regex node is passed to the replacer function.
+// If the replacer function did not rewrote the regular expression node,
+// this function transforms the regex node into a regular expression string.
+func (w *subPatternWriter) writeNode(n *regexNode, ctx *subPatternContext) {
+	if w.replace(w, n, ctx) {
 		return
 	}
 
-	switch t.opcode {
+	switch n.opcode {
 	case opAny:
 		w.WriteByte('.')
 	case opAssert, opAssertNot:
-		p := t.params.(assertParams)
+		p := n.params.(assertParams)
 
 		w.WriteString("(?")
 
 		if p.dir < 0 {
 			w.WriteByte('<')
 		}
-		if t.opcode == opAssert {
+		if n.opcode == opAssert {
 			w.WriteByte('=')
 		} else {
 			w.WriteByte('!')
@@ -305,7 +338,7 @@ func (w *subPatternWriter) writeNode(t *regexNode, ctx *subPatternContext) {
 		w.writePattern(p.p, ctx.group)
 		w.WriteByte(')')
 	case opAt:
-		at := t.params.(atcode)
+		at := n.params.(atcode)
 
 		switch at {
 		case atBeginning:
@@ -322,7 +355,7 @@ func (w *subPatternWriter) writeNode(t *regexNode, ctx *subPatternContext) {
 			w.WriteString(`\Z`)
 		}
 	case opBranch:
-		items := t.params.([]*subPattern)
+		items := n.params.([]*subPattern)
 
 		// Always wrap branches branches inside of an non-capture group, if the current
 		// subpattern contains other node, than this branch node.
@@ -340,7 +373,7 @@ func (w *subPatternWriter) writeNode(t *regexNode, ctx *subPatternContext) {
 		}
 	case opCategory:
 		// Always inside of character sets.
-		category := t.params.(catcode)
+		category := n.params.(catcode)
 
 		switch category {
 		case categoryDigit:
@@ -357,12 +390,12 @@ func (w *subPatternWriter) writeNode(t *regexNode, ctx *subPatternContext) {
 			w.WriteString(`\W`)
 		}
 	case opGroupref:
-		group := t.params.(int)
+		group := n.params.(int)
 
 		w.WriteString(`\`)
 		w.writeInt(group)
 	case opGrouprefExists:
-		p := t.params.(grouprefExParam)
+		p := n.params.(grouprefExParam)
 
 		w.WriteString("(?(")
 		w.writeInt(p.condgroup)
@@ -378,7 +411,7 @@ func (w *subPatternWriter) writeNode(t *regexNode, ctx *subPatternContext) {
 		// IN nodes are always written as sets, because it is unknown, how the replacer function
 		// rewrites elements inside of the set.
 
-		items := t.params.([]*regexNode)
+		items := n.params.([]*regexNode)
 
 		newCtx := subPatternContext{
 			hasSiblings: len(items) > 1,
@@ -392,9 +425,9 @@ func (w *subPatternWriter) writeNode(t *regexNode, ctx *subPatternContext) {
 		}
 		w.WriteByte(']')
 	case opLiteral:
-		w.writeLiteral(t.c)
+		w.writeLiteral(n.c)
 	case opMinRepeat, opMaxRepeat, opPossessiveRepeat:
-		p := t.params.(repeatParams)
+		p := n.params.(repeatParams)
 
 		needsGroup := false
 		if p.item.len() > 1 {
@@ -430,7 +463,7 @@ func (w *subPatternWriter) writeNode(t *regexNode, ctx *subPatternContext) {
 			w.WriteByte('}')
 		}
 
-		switch t.opcode {
+		switch n.opcode {
 		case opMinRepeat:
 			w.WriteByte('?')
 		case opPossessiveRepeat:
@@ -440,16 +473,16 @@ func (w *subPatternWriter) writeNode(t *regexNode, ctx *subPatternContext) {
 		w.WriteByte('^')
 	case opNotLiteral:
 		w.WriteString("[^")
-		w.writeLiteral(t.c)
+		w.writeLiteral(n.c)
 		w.WriteByte(']')
 	case opRange:
-		p := t.params.(rangeParams)
+		p := n.params.(rangeParams)
 
 		w.writeLiteral(p.lo)
 		w.WriteByte('-')
 		w.writeLiteral(p.hi)
 	case opSubpattern:
-		p := t.params.(subPatternParam)
+		p := n.params.(subPatternParam)
 
 		w.WriteByte('(')
 
@@ -488,7 +521,7 @@ func (w *subPatternWriter) writeNode(t *regexNode, ctx *subPatternContext) {
 
 		w.WriteByte(')')
 	case opAtomicGroup:
-		p := t.params.(*subPattern)
+		p := n.params.(*subPattern)
 
 		w.WriteString("(?>")
 		w.writePattern(p, ctx.group)
@@ -498,6 +531,7 @@ func (w *subPatternWriter) writeNode(t *regexNode, ctx *subPatternContext) {
 	}
 }
 
+// groupName returns the name of the group at the given index or an empty string if the group is unnamed.
 func groupName(p *subPattern, gid int) string {
 	for name, g := range p.state.groupdict {
 		if gid == g {
@@ -508,10 +542,15 @@ func groupName(p *subPattern, gid int) string {
 	return ""
 }
 
+// writeInt writes the integer to the subpattern writer.
 func (w *subPatternWriter) writeInt(i int) {
 	w.WriteString(strconv.Itoa(i))
 }
 
+// writeLiteral writes the literal to the subpattern writer.
+// The value is always appended in hexadecimal format, as it is clear and unambiguous
+// without introducing any scoping errors in the parser of the regex engine.
+// It will have either the format "\x.." or "\x{...}".
 func (w *subPatternWriter) writeLiteral(r rune) {
 	l := utf8.RuneLen(r)
 
@@ -538,6 +577,8 @@ func (w *subPatternWriter) writeLiteral(r rune) {
 	}
 }
 
+// writeFlags writes the regex flags to the subpattern writer.
+// They are ordered as follows: "aiLmsux".
 func (w *subPatternWriter) writeFlags(flags uint32) {
 	if flags&FlagASCII != 0 {
 		w.WriteByte('a')

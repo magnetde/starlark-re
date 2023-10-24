@@ -46,50 +46,50 @@ type subPatternParam struct {
 }
 
 // equals checks, if two nodes are equal by comparing their opcodes and its parameters.
-func (t *regexNode) equals(o *regexNode) bool {
-	if t.opcode != o.opcode {
+func (n *regexNode) equals(o *regexNode) bool {
+	if n.opcode != o.opcode {
 		return false
 	}
 
-	switch t.opcode {
+	switch n.opcode {
 	case opFailure:
 		return true
 	case opAny:
 		return true
 	case opAssert, opAssertNot:
-		return t.params.(assertParams) == o.params.(assertParams)
+		return n.params.(assertParams) == o.params.(assertParams)
 	case opAt:
-		return t.params.(atcode) == o.params.(atcode)
+		return n.params.(atcode) == o.params.(atcode)
 	case opBranch:
-		p1 := t.params.([]*subPattern)
+		p1 := n.params.([]*subPattern)
 		p2 := o.params.([]*subPattern)
 		return slices.Equal(p1, p2)
 	case opCategory:
-		return t.params.(catcode) == o.params.(catcode)
+		return n.params.(catcode) == o.params.(catcode)
 	case opGroupref:
-		return t.params.(int) == o.params.(int)
+		return n.params.(int) == o.params.(int)
 	case opGrouprefExists:
-		return t.params.(grouprefExParam) == o.params.(grouprefExParam)
+		return n.params.(grouprefExParam) == o.params.(grouprefExParam)
 	case opIn:
-		p1 := t.params.([]*regexNode)
+		p1 := n.params.([]*regexNode)
 		p2 := o.params.([]*regexNode)
 		return slices.EqualFunc(p1, p2, func(t1, t2 *regexNode) bool {
 			return t1.equals(t2)
 		})
 	case opLiteral, opNotLiteral:
-		return t.c == o.c
+		return n.c == o.c
 	case opMinRepeat, opMaxRepeat, opPossessiveRepeat:
-		return t.params.(repeatParams) == o.params.(repeatParams)
+		return n.params.(repeatParams) == o.params.(repeatParams)
 	case opNegate:
 		return true
 	case opRange:
-		p1 := t.params.(rangeParams)
+		p1 := n.params.(rangeParams)
 		p2 := o.params.(rangeParams)
 		return p1.lo == p2.lo && p1.hi == p2.hi
 	case opSubpattern:
-		return t.params.(subPatternParam) == o.params.(subPatternParam)
+		return n.params.(subPatternParam) == o.params.(subPatternParam)
 	case opAtomicGroup:
-		return t.params.(*subPattern) == o.params.(*subPattern)
+		return n.params.(*subPattern) == o.params.(*subPattern)
 	}
 
 	return false

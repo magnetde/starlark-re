@@ -1079,7 +1079,7 @@ func parseFlags(s *source, state *state, char rune) (addFlags, delFlags uint32, 
 	return
 }
 
-// unique removes duplicate regex nodes from a slice.
+// unique removes duplicate regex nodes from a slice inplace.
 // This functions is a modified version of `slices.DeleteFunc`.
 // If the length of the slice exceeds a certain size, it may be better to use a hashset
 // as the worst case runtime is O(n^2).
