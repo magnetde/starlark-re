@@ -6,16 +6,15 @@ import (
 	"github.com/magnetde/starlark-re/regex"
 )
 
-// Replacement for `FindStringSubmatchIndex`, to specify a starting position.
+// findMatch searches the first match of pattern `r` in `s`, starting the search at position `pos`.
+// The `longest` parameter determines whether to perform the longest search.
 func findMatch(r regex.Engine, s string, pos int, longest bool) ([]int, error) {
 	in := r.BuildInput(s)
 	return in.Find(pos, longest, nil)
 }
 
-// TODO
-// Needs a special implementation, `FindAllStringSubmatchIndex` removes empty matches right after a prevous match.
-// Is necessary because python includes empty matches right after a previous match.
-// The deliver function must not modify the match.
+// findMatches returns all matches of pattern `r` in `s`, starting the search at position `pos` and
+// finding at most of `n` matches. The results are passed to the caller via the `deliver` function.
 func findMatches(r regex.Engine, s string, pos int, n int, deliver func(a []int) error) error {
 	in := r.BuildInput(s)
 

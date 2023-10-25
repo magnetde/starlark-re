@@ -20,11 +20,13 @@ func (t *TemplateRule) IsLiteral() bool {
 }
 
 // ParseTemplate converts a template string into a list of rules.
-// This list is an alternating sequence of literal rules and group rules.
-// For example, the template "x\1yz" results in the following list:
+// This list is a sequence of literal rules and group rules.
+// For example, the template "x\1\2yz\3" results in the following list:
 //   - 0: literal "x"
 //   - 1: group 1
-//   - 2: literal "yz"
+//   - 2: group 2
+//   - 3: literal "yz"
+//   - 4: group 3
 func ParseTemplate(r Engine, template string, isString bool) ([]TemplateRule, error) {
 	var s source
 	s.init(template, isString)

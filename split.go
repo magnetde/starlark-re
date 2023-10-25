@@ -2,6 +2,7 @@ package re
 
 import "go.starlark.net/starlark"
 
+// split splits `str` at all occurrences of pattern `p`. See also `reSplit`.
 func split(p *Pattern, str strOrBytes, maxSplit int) (*starlark.List, error) {
 	s := str.value
 
