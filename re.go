@@ -779,8 +779,6 @@ type Pattern struct {
 	pattern         strOrBytes
 	flags           uint32
 	fallbackEnabled bool // necessary to create a correct string representation
-
-	groupDict map[string]int
 }
 
 // newPattern creates a new pattern object, which is also a Starlark value.
@@ -794,23 +792,11 @@ func newPattern(thread *starlark.Thread, pattern strOrBytes, flags uint32, fallb
 		return nil, false, err
 	}
 
-	// Python does not allow multiple groups with the same name, so this must be checked after compilation.
-	// Furthermore, the groupdict is created, since it may be needed for matches.
-	groups := make(map[string]int)
-
-	names := re.SubexpNames()
-	for i, name := range names {
-		if i != 0 && name != "" {
-			groups[name] = i
-		}
-	}
-
 	o := Pattern{
 		re:              re,
 		pattern:         pattern,
 		flags:           re.Flags(),
 		fallbackEnabled: fallbackEnabled,
-		groupDict:       groups,
 	}
 
 	// Dump the compiled regex if the DEBUG flag is passed.
@@ -1382,7 +1368,7 @@ func (m *Match) getIndex(v starlark.Value) (int, bool) {
 			return int(i), true
 		}
 	case starlark.String:
-		if i, ok := m.pattern.groupDict[string(t)]; ok {
+		if i := m.pattern.re.SubexpIndex(string(t)); i >= 0 {
 			return i, true
 		}
 	}
