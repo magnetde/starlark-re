@@ -2249,9 +2249,9 @@ def test_search_dot_unicode():
 def test_compile():
     # Test return value when given string and pattern as parameter
     pattern = re.compile('random pattern')
-    assertIsInstance(pattern, "pattern")
+    assertIsInstance(pattern, "Pattern")
     same_pattern = re.compile(pattern)
-    assertIsInstance(same_pattern, "pattern")
+    assertIsInstance(same_pattern, "Pattern")
     assertIs(same_pattern, pattern)
     # Test behaviour when not given a string or pattern as parameter
     assertRaises(lambda: re.compile(0))

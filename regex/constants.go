@@ -60,7 +60,7 @@ type opcode uint32
 //     subpattern, either as capture group or non-capturing with optional flags;
 //     `(?P<...>...)`, `(?...:...)`
 //   - ATOMIC_GROUP: possessive match; `(?>...)`
-//   - POSSESSIVE_REPEAT: possesive repeat; `?+`, `*+`, `++`, `{...}+`
+//   - POSSESSIVE_REPEAT: possessive repeat; `?+`, `*+`, `++`, `{...}+`
 const (
 	opFailure          opcode = iota // FAILURE
 	opAny                            // ANY

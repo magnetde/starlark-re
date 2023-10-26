@@ -281,11 +281,13 @@ func (m *Module) cachedCompile(thread *starlark.Thread, pattern strOrBytes, flag
 
 // purge clears the regex cache.
 func (m *Module) purge() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	if m.enableCache {
+		m.mu.Lock()
+		defer m.mu.Unlock()
 
-	m.list.Init()
-	clear(m.cache)
+		m.list.Init()
+		clear(m.cache)
+	}
 }
 
 // Function naming
