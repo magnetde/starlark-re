@@ -149,8 +149,10 @@ func NewModuleOptions(opts *ModuleOptions) *Module {
 	enableCache := !opts.DisableCache
 	maxCacheSize := opts.MaxCacheSize
 	enableFallback := !opts.DisableFallback
-	if maxCacheSize <= 0 {
+	if maxCacheSize < 0 {
 		enableCache = false // disable cache
+	} else if maxCacheSize == 0 {
+		maxCacheSize = defaultMaxCacheSize
 	}
 
 	// By default each "re" module instance shares the same map,
@@ -1183,7 +1185,7 @@ var (
 // String returns the string representation of the value.
 func (m *Match) String() string {
 	g := m.groups[0]
-	return fmt.Sprintf("<re.match object; span=(%d, %d), match=%s>",
+	return fmt.Sprintf("<re.Match object; span=(%d, %d), match=%s>",
 		g.start, g.end, util.Repr(m.groupStr(&g), m.str.isString),
 	)
 }

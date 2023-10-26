@@ -2,6 +2,7 @@ package re
 
 import (
 	_ "embed"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -19,9 +20,35 @@ var reScript string
 // TestRe is the main function for regex tests.
 // Tests must be defined within the `re_test.py` file and are interpreted here.
 func TestRe(t *testing.T) {
-	predeclared := starlark.StringDict{
-		"re": re.NewModule(),
+	err := runTests(t, re.NewModule())
+	if err != nil {
+		t.Fatal(err)
 	}
+
+	// Disable cache
+	options := &re.ModuleOptions{
+		MaxCacheSize: -1,
+	}
+
+	err = runTests(t, re.NewModuleOptions(options))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Tests should fail when disabling the fallback engine
+	options = &re.ModuleOptions{
+		DisableFallback: true,
+	}
+
+	err = runTests(t, re.NewModuleOptions(options))
+	if err == nil {
+		t.Fatal("expected error, got <nil>")
+	}
+}
+
+// runTests executes "re_test.py".
+func runTests(t *testing.T, re *re.Module) error {
+	predeclared := starlark.StringDict{"re": re}
 
 	helpers := map[string]func(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error){
 		"same":           sameHelper,
@@ -45,22 +72,23 @@ func TestRe(t *testing.T) {
 
 	_, prog, err := starlark.SourceProgramOptions(&opts, "re_test.py", reScript, predeclared.Has)
 	if err != nil {
-		t.Fatal(err)
+		return err
 	}
 
 	thread := &starlark.Thread{
 		Name: "test re",
-		Print: func(thread *starlark.Thread, msg string) {
-			fmt.Println(msg)
+		Print: func(_ *starlark.Thread, msg string) {
+			t.Log(msg)
 		},
 	}
 
 	_, err = prog.Init(thread, predeclared)
 	if err != nil {
 		e := err.(*starlark.EvalError)
-
-		t.Fatal(e.Backtrace())
+		return errors.New(e.Backtrace())
 	}
+
+	return nil
 }
 
 // sameHelper tests, whether two Starlark values are identical.

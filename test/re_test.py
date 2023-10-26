@@ -2323,19 +2323,19 @@ def test_issue17998():
 def test_match_repr():
     string = '[abracadabra]'
     m = re.search(r'(.+)(.*?)\1', string)
-    pattern = r"<re\.match object; span=\(1, 12\), match='abracadabra'>"
+    pattern = r"<re\.Match object; span=\(1, 12\), match='abracadabra'>"
     assertRegex(repr(m), pattern)
 
     string = b'[abracadabra]'
     m = re.search(b'(.+)(.*?)\\1', string)
-    pattern = r"<re\.match object; span=\(1, 12\), match=b'abracadabra'>"
+    pattern = r"<re\.Match object; span=\(1, 12\), match=b'abracadabra'>"
     assertRegex(repr(m), pattern)
 
     first, second = list(re.finditer("(aa)|(bb)", "aa bb"))
-    pattern = r"<re\.match object; span=\(0, 2\), match='aa'>"
+    pattern = r"<re\.Match object; span=\(0, 2\), match='aa'>"
     assertRegex(repr(first), pattern)
 
-    pattern = r"<re\.match object; span=\(3, 5\), match='bb'>"
+    pattern = r"<re\.Match object; span=\(3, 5\), match='bb'>"
     assertRegex(repr(second), pattern)
 
 def test_zerowidth():
@@ -2970,6 +2970,37 @@ def test_re_tests():
         # that it still succeeds.
         obj = re.compile(pattern, re.UNICODE)
         assertTrue(obj.search(s))
+
+
+# Extra tests for Starlark re
+
+def test_interface():
+    assertEqual(str(re), '<module re>')
+    assertEqual(type(re), 'module')
+    assertEqual(bool(re), True)
+    assertRaisesRegex(lambda: {re: 0}, 'unhashable')
+    assertRaises(lambda: re.unknown)
+
+    p = re.compile(r'.')
+    assertEqual(str(p), "re.compile('.')")
+    assertEqual(type(p), 'Pattern')
+    assertEqual(bool(p), True)
+    assertEqual(len({p: 0}), 1)
+    assertRaises(lambda: p.unknown)
+
+    m = p.match('x')
+    assertEqual(str(m), "<re.Match object; span=(0, 1), match='x'>")
+    assertEqual(type(m), 'Match')
+    assertEqual(bool(m), True)
+    assertEqual(len({m: 0}), 1)
+    assertRaises(lambda: m.unknown)
+
+    i = p.finditer('abc')
+    assertRegex(str(i), 'match_iterator object at')
+    assertEqual(type(i), 'match_iterator')
+    assertEqual(bool(i), True)
+    assertRaisesRegex(lambda: {i: 0}, 'unhashable')
+    assertRaises(lambda: i.unknown)
 
 
 # Run all tests:
