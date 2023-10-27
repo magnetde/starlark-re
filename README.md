@@ -111,4 +111,3 @@ Currently, there are some differences to the Python re module:
   This may result in differing outcomes compared to Python, especially at the `fullmatch` function.
 - The default regex engine does not match `\b` at Unicode characters, while the fallback engine does.
 - There is no support for possessive repetion operators and `Pattern.scanner`.
-- The `re.IGNORECASE` flag may work incorrect incorrectly for `bytes` patterns.
