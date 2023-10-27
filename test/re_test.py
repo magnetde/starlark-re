@@ -2979,28 +2979,272 @@ def test_interface():
     assertEqual(type(re), 'module')
     assertEqual(bool(re), True)
     assertRaisesRegex(lambda: {re: 0}, 'unhashable')
-    assertRaises(lambda: re.unknown)
+    assertRaisesRegex(lambda: re.unknown,
+                      'has no .unknown field or method')
 
     p = re.compile(r'.')
     assertEqual(str(p), "re.compile('.')")
     assertEqual(type(p), 'Pattern')
     assertEqual(bool(p), True)
     assertEqual(len({p: 0}), 1)
-    assertRaises(lambda: p.unknown)
+    assertRaisesRegex(lambda: p.unknown,
+                      'has no .unknown field or method')
 
     m = p.match('x')
     assertEqual(str(m), "<re.Match object; span=(0, 1), match='x'>")
     assertEqual(type(m), 'Match')
     assertEqual(bool(m), True)
     assertEqual(len({m: 0}), 1)
-    assertRaises(lambda: m.unknown)
+    assertRaisesRegex(lambda: m.unknown,
+                      'has no .unknown field or method')
 
     i = p.finditer('abc')
     assertRegex(str(i), 'match_iterator object at')
     assertEqual(type(i), 'match_iterator')
     assertEqual(bool(i), True)
     assertRaisesRegex(lambda: {i: 0}, 'unhashable')
-    assertRaises(lambda: i.unknown)
+    assertRaisesRegex(lambda: i.unknown,
+                      'has no .unknown field or method')
+
+def test_compare():
+    assertEqual(re, re)
+
+    p = re.compile(r'.')
+    assertEqual(p, re.compile(r'.'))
+    assertEqual(p, re.compile(r'.', 0))
+    assertNotEqual(p, re.compile(r'.', re.IGNORECASE))
+    assertNotEqual(p, re.compile(b'.'))
+    assertRaises(lambda: p < re.compile(r'.'),
+                 'Pattern < Pattern not implemented')
+
+    assertEqual(p.match('xyz'), re.match(r'.', 'xyz'))
+    assertEqual(p.match('xyz'), re.match(r'.', 'xyz', flags=0))
+    assertNotEqual(p.match('xyz'), p.match('x'))
+    assertNotEqual(p.match('xyz'), re.match(b'.', b'xyz'))
+    assertRaises(lambda: p.match('xyz') < re.match(r'.', 'xyz'),
+                 'Match < Match not implemented')
+
+def test_invalid_args():
+    assertRaises(lambda: re.compile())
+    assertRaises(lambda: re.purge(0))
+    assertRaises(lambda: re.escape())
+
+    assertRaises(lambda: re.search())
+    assertRaises(lambda: re.search(r'*'))
+    assertRaises(lambda: re.search(r'.', b'x'))
+
+    assertRaises(lambda: re.match())
+    assertRaises(lambda: re.match(r'*', ''))
+    assertRaises(lambda: re.match(r'.', b'x'))
+
+    assertRaises(lambda: re.fullmatch())
+    assertRaises(lambda: re.fullmatch(r'*', ''))
+    assertRaises(lambda: re.fullmatch(r'.', b'x'))
+
+    assertRaises(lambda: re.split())
+    assertRaises(lambda: re.split(r'*', ''))
+    assertRaises(lambda: re.split(r'.', b'x'))
+
+    assertRaises(lambda: re.findall())
+    assertRaises(lambda: re.findall(r'*', ''))
+    assertRaises(lambda: re.findall(r'.', b'x'))
+
+    assertRaises(lambda: re.finditer())
+    assertRaises(lambda: re.finditer(r'*', ''))
+    assertRaises(lambda: re.finditer(r'.', b'x'))
+
+    assertRaises(lambda: re.sub())
+    assertRaises(lambda: re.sub(r'*', '', ''))
+    assertRaises(lambda: re.sub(r'.', b'x', ''))
+
+    assertRaises(lambda: re.subn())
+    assertRaises(lambda: re.subn(r'*', '', ''))
+    assertRaises(lambda: re.subn(r'.', b'x', ''))
+
+def test_invalid_args_pattern():
+    p = re.compile(r'.')
+
+    assertRaises(lambda: p.search())
+    assertRaises(lambda: p.search(b'x'))
+
+    assertRaises(lambda: p.match())
+    assertRaises(lambda: p.match(b'x'))
+
+    assertRaises(lambda: p.fullmatch())
+    assertRaises(lambda: p.fullmatch(b'x'))
+
+    assertRaises(lambda: p.split())
+    assertRaises(lambda: p.split(b'x'))
+
+    assertRaises(lambda: p.findall())
+    assertRaises(lambda: p.findall(b'x'))
+
+    assertRaises(lambda: p.finditer())
+    assertRaises(lambda: p.finditer(b'x'))
+
+    assertRaises(lambda: p.sub())
+    assertRaises(lambda: p.sub(b'x', ''))
+
+    assertRaises(lambda: p.subn())
+    assertRaises(lambda: p.subn(b'x', ''))
+
+def test_invalid_args_match():
+    m = re.match(r'.', 'x')
+
+    assertRaises(lambda: m.expand())
+    assertRaises(lambda: m.expand(b'x'))
+    assertRaises(lambda: m.expand('\\'))
+
+    assertRaises(lambda: m.group(key=None))
+    assertRaises(lambda: m.group(None))
+    assertRaises(lambda: m.group(0, None))
+
+    assertRaises(lambda: m.groups(none=None))
+    assertRaises(lambda: m.groupdict(none=None))
+
+    assertRaises(lambda: m.start(None))
+    assertRaises(lambda: m.start(none=None))
+
+    assertRaises(lambda: m.end(None))
+    assertRaises(lambda: m.end(none=None))
+
+    assertRaises(lambda: m.span(None))
+    assertRaises(lambda: m.span(none=None))
+
+def test_pattern_members():
+    p = re.compile(r'(?P<num>\d+)-(?P<outer>(?P<word>\w+))', re.IGNORECASE | re.ASCII)
+
+    assertEqual(p.flags, re.IGNORECASE | re.ASCII)
+    assertEqual(p.groups, 3)
+    assertEqual(p.groupindex, {'num': 1, 'outer': 2, 'word': 3})
+    assertEqual(p.pattern, r'(?P<num>\d+)-(?P<outer>(?P<word>\w+))')
+
+def test_match_nogroups():
+    p = re.compile(r'\d+-\w+')
+    m = p.search('123-abc')
+
+    assertEqual(m.pos, 0)
+    assertEqual(m.endpos, 7)
+    assertEqual(m.lastindex, None)
+    assertEqual(m.re, p)
+    assertEqual(m.string, '123-abc')
+    assertEqual(m.group(), '123-abc')
+    assertEqual(m.group(0), '123-abc')
+    assertEqual(m.group(0, 0), ('123-abc', '123-abc'))
+    assertRaises(lambda: m.group(1))
+    assertRaises(lambda: m.group('0'))
+    assertRaises(lambda: m.group(0, '0'))
+    assertEqual(m.groups(), ())
+    assertEqual(m.groupdict(), {})
+    assertEqual(m.start(), 0)
+    assertEqual(m.start(0), 0)
+    assertRaises(lambda: m.start(1))
+    assertRaises(lambda: m.start('0'))
+    assertEqual(m.end(), 7)
+    assertEqual(m.end(0), 7)
+    assertRaises(lambda: m.end(1))
+    assertRaises(lambda: m.end('0'))
+    assertEqual(m.span(), (0, 7))
+    assertEqual(m.span(0), (0, 7))
+    assertRaises(lambda: m.span(1))
+    assertRaises(lambda: m.span('0'))
+
+    p = re.compile(b'\\d+-\\w+')
+    m = p.search(b'123-abc')
+
+    assertEqual(m.string, b'123-abc')
+    assertEqual(m.group(), b'123-abc')
+
+def test_match_groups():
+    p = re.compile(r'(?P<num>\d+)-(?P<outer>(?P<word>\w+))')
+    m = p.search('-123-abc-', pos=1, endpos=8)
+
+    assertEqual(m.pos, 1)
+    assertEqual(m.endpos, 8)
+    assertEqual(m.lastindex, 2)
+    assertEqual(m.re, p)
+    assertEqual(m.string, '-123-abc-')
+    assertEqual(m.expand(r'[\2]-[\1]'), '[abc]-[123]')
+    assertEqual(m.group(), '123-abc')
+    assertEqual(m.group(1), '123')
+    assertEqual(m.group('word'), 'abc')
+    assertEqual(m.group(1, 'outer'), ('123', 'abc'))
+    assertRaises(lambda: m.group(4))
+    assertRaises(lambda: m.group('0'))
+    assertEqual(m.groups(), ('123', 'abc', 'abc'))
+    assertEqual(m.groupdict(), {'num': '123', 'outer': 'abc', 'word': 'abc'})
+    assertEqual(m.start(), 1)
+    assertEqual(m.start(1), 1)
+    assertEqual(m.start('word'), 5)
+    assertRaises(lambda: m.start(4))
+    assertRaises(lambda: m.start('0'))
+    assertEqual(m.end(), 8)
+    assertEqual(m.end(1), 4)
+    assertEqual(m.end('word'), 8)
+    assertRaises(lambda: m.end(4))
+    assertRaises(lambda: m.end('0'))
+    assertEqual(m.span(), (1, 8))
+    assertEqual(m.span(1), (1, 4))
+    assertEqual(m.span('word'), (5, 8))
+    assertRaises(lambda: m.span(4))
+    assertRaises(lambda: m.span('0'))
+
+    p = re.compile(b'(?P<num>\\d+)-(?P<outer>(?P<word>\\w+))')
+    m = p.search(b'-123-abc-', pos=1, endpos=8)
+
+    assertEqual(m.expand(b'[\\2]-[\\1]'), b'[abc]-[123]')
+    assertEqual(m.group('word'), b'abc')
+    assertRaises(lambda: m.group(b'word'))
+
+def test_match_lastindex():
+    m = re.match(r'.', 'x')
+    assertEqual(m.lastindex, None)
+    assertEqual(m.lastgroup, None)
+
+    m = re.match(r'(.)', 'x')
+    assertEqual(m.lastindex, 1)
+    assertEqual(m.lastgroup, None)
+
+    m = re.match(r'(?P<name>.)', 'x')
+    assertEqual(m.lastindex, 1)
+    assertEqual(m.lastgroup, 'name')
+
+    m = re.match(r'(?P<name>a)?', 'x')
+    assertEqual(m.lastindex, None)
+    assertEqual(m.lastgroup, None)
+
+    m = re.match(r'(x)(?P<name>a)?', 'x')
+    assertEqual(m.lastindex, 1)
+    assertEqual(m.lastgroup, None)
+
+    m = re.match(r'(?P<matched>x)(?P<name>a)?', 'x')
+    assertEqual(m.lastindex, 1)
+    assertEqual(m.lastgroup, 'matched')
+
+    m = re.match(r'(?P<first>(?P<second>x))?', 'x')
+    assertEqual(m.lastindex, 1)
+    assertEqual(m.lastgroup, 'first')
+
+    m = re.match(r'(?P<first>(?P<second>x))?(P<third>x)?', 'x')
+    assertEqual(m.lastindex, 1)
+    assertEqual(m.lastgroup, 'first')
+
+    m = re.match(r'(\bx)?(x)', 'x')
+    assertEqual(m.lastindex, 2)
+    assertEqual(m.lastgroup, None)
+
+    m = re.match(b'(?P<name>.)', b'x')
+    assertEqual(m.lastindex, 1)
+    assertEqual(m.lastgroup, 'name')
+
+def test_sub_err():
+    p = re.compile(r'\w+')
+    assertRaises(lambda: p.sub(0, 'word-word'))
+    assertRaises(lambda: p.sub(b'x', 'word-word'))
+    assertRaises(lambda: p.sub(lambda: 'x', 'word-word'))
+    assertRaises(lambda: p.sub(lambda m: 0, 'word-word'))
+    assertRaises(lambda: p.sub(lambda m: b'x', 'word-word'))
+    assertRaises(lambda: p.sub(lambda m: fail('failure'), 'word-word'))
 
 
 # Run all tests:
@@ -3139,3 +3383,15 @@ test_flags_repr()
 test_repeat_minmax_overflow_maxrepeat()
 test_re_benchmarks()
 test_re_tests()
+
+test_interface()
+test_compare()
+test_invalid_args()
+test_invalid_args_pattern()
+test_invalid_args_match()
+test_pattern_members()
+test_match_nogroups()
+test_match_groups()
+test_match_lastindex()
+test_sub_err()
+

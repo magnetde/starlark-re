@@ -1,34 +1,28 @@
 package util
 
 import (
-	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 )
 
-var (
-	quoteReplacer = strings.NewReplacer(`'`, `\'`, `\"`, `"`)
-	hexChars      = "0123456789abcdef"
-)
+var hexDigits = "0123456789abcdef"
 
 // Repr returns a representation of an string.
 // The `isString` parameter determines whether the string should be treated as a string or a bytes object.
 func Repr(s string, isString bool) string {
-	return quoteString(s, isString, true, false)
+	return stringRepr(s, isString)
 }
 
 // ASCII returns a string that escapes all non-printable or non-ASCII characters.
 // The `isString` parameter determines whether the string should be treated as a string or a bytes object.
 func ASCII(s string, isString bool) string {
-	return quoteString(s, isString, false, true)
+	return ASCIIReplace(stringRepr(s, isString))
 }
 
-// quoteString quotes a string and escapes non-printable characters.
+// stringRepr returns a string representation of the string.
 // The `isString` parameter determines whether the string should be interpreted as a string or a bytes object.
-// If `bPrefix` is set to true, an "b" prefix will be prepended to the string.
-// If `ascii` is true, all non-ASCII characters are escaped.
-func quoteString(s string, isString bool, bPrefix bool, ascii bool) string {
+func stringRepr(s string, isString bool) string {
 	var b strings.Builder
 	b.Grow(len(s) + 3)
 
@@ -39,68 +33,111 @@ func quoteString(s string, isString bool, bPrefix bool, ascii bool) string {
 		quote = '"'
 	}
 
-	if !isString && bPrefix {
+	if !isString {
 		b.WriteByte('b')
 	}
 
-	if isString {
-		if !ascii {
-			s = strconv.Quote(s)
+	b.WriteByte(quote)
+
+	var ch rune
+	for size := 0; len(s) > 0; s = s[size:] {
+		if isString {
+			ch, size = utf8.DecodeRuneInString(s)
 		} else {
-			s = strconv.QuoteToASCII(s)
+			ch = rune(s[0])
+			size = 1
 		}
 
-		if quote == '\'' {
-			b.WriteByte('\'')
-			_, _ = quoteReplacer.WriteString(&b, s[1:len(s)-1])
-			b.WriteByte('\'')
-		} else {
-			b.WriteString(s)
+		// Handle utf8 errors
+		if ch == utf8.RuneError {
+			b.WriteString(`\x`)
+			b.WriteByte(hexDigits[(s[0]>>4)&0x000F])
+			b.WriteByte(hexDigits[s[0]&0x000F])
+
+			size = 1
+			continue
 		}
-	} else {
-		b.WriteByte(quote)
-		for i := 0; i < len(s); i++ {
-			c := s[i]
-			WriteEscapedByte(&b, c, c == quote || c == '\\')
+
+		// Escape quotes and backslashes
+		if ch == rune(quote) || ch == '\\' {
+			b.WriteByte('\\')
+			b.WriteByte(byte(ch))
+			continue
 		}
-		b.WriteByte(quote)
+
+		// Map special whitespace to '\t', \n', '\r'
+		if ch == '\t' {
+			b.WriteByte('\\')
+			b.WriteByte('t')
+		} else if ch == '\n' {
+			b.WriteByte('\\')
+			b.WriteByte('n')
+		} else if ch == '\r' {
+			b.WriteByte('\\')
+			b.WriteByte('r')
+		} else if ch < ' ' || ch == unicode.MaxASCII { // Map non-printable US ASCII to '\xhh' */
+			b.WriteString(`\x`)
+			b.WriteByte(hexDigits[(ch>>4)&0x000F])
+			b.WriteByte(hexDigits[ch&0x000F])
+		} else if !unicode.IsPrint(ch) { // Escpae non-printable characters
+			hexEscape(&b, ch)
+		} else { // Copy characters as-is
+			b.WriteRune(ch)
+		}
 	}
+
+	b.WriteByte(quote)
 
 	return b.String()
 }
 
-// WriteEscapedByte escapes a byte and writes it to the string builder,
-// escaping all special and non-ASCII characters by default.
-// Additionally, if `force` is true, the function will always escape the character 'c'.
-func WriteEscapedByte(w *strings.Builder, c byte, force bool) {
-	if force {
-		w.WriteByte('\\')
-		w.WriteByte(c)
-		return
+// hexEscape escapes the character to a hex sequence and writes it to the string builder.
+func hexEscape(w *strings.Builder, ch rune) {
+	w.WriteByte('\\')
+	if ch <= 0xff { // Map 8-bit characters to '\xhh'
+		w.WriteByte('x')
+		w.WriteByte(hexDigits[(ch>>4)&0x000F])
+		w.WriteByte(hexDigits[ch&0x000F])
+	} else if ch <= 0xffff { // Map 16-bit characters to '\uxxxx'
+		w.WriteByte('u')
+		w.WriteByte(hexDigits[(ch>>12)&0xF])
+		w.WriteByte(hexDigits[(ch>>8)&0xF])
+		w.WriteByte(hexDigits[(ch>>4)&0xF])
+		w.WriteByte(hexDigits[ch&0xF])
+	} else { // Map 21-bit characters to '\U00xxxxxx'
+		w.WriteByte('U')
+		w.WriteByte(hexDigits[(ch>>28)&0xF])
+		w.WriteByte(hexDigits[(ch>>24)&0xF])
+		w.WriteByte(hexDigits[(ch>>20)&0xF])
+		w.WriteByte(hexDigits[(ch>>16)&0xF])
+		w.WriteByte(hexDigits[(ch>>12)&0xF])
+		w.WriteByte(hexDigits[(ch>>8)&0xF])
+		w.WriteByte(hexDigits[(ch>>4)&0xF])
+		w.WriteByte(hexDigits[ch&0xF])
 	}
+}
 
-	switch c {
-	case '\a':
-		w.WriteString(`\a`)
-	case '\b':
-		w.WriteString(`\b`)
-	case '\f':
-		w.WriteString(`\f`)
-	case '\n':
-		w.WriteString(`\n`)
-	case '\r':
-		w.WriteString(`\r`)
-	case '\t':
-		w.WriteString(`\t`)
-	case '\v':
-		w.WriteString(`\v`)
-	default:
-		if c < utf8.RuneSelf && unicode.IsPrint(rune(c)) {
-			w.WriteByte(c)
+// ASCIIReplace replaces all non-printable characters in a string with their respective
+// escape sequence and replaces non-ascii bytes with an hexadecimal escape sequence.
+func ASCIIReplace(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+
+	var ch rune
+
+	for size := 0; len(s) > 0; s = s[size:] {
+		ch, size = utf8.DecodeRuneInString(s)
+		if ch == utf8.RuneError {
+			ch = rune(s[0])
+			size = 1
+		}
+
+		if ch >= unicode.MaxASCII || !unicode.IsPrint(ch) {
+			hexEscape(&b, ch)
 		} else {
-			w.WriteString(`\x`)
-			w.WriteByte(hexChars[c>>4])
-			w.WriteByte(hexChars[c&0xF])
+			b.WriteRune(ch)
 		}
 	}
+
+	return b.String()
 }

@@ -455,12 +455,14 @@ func reSearch(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple,
 
 // regexSearch - see `reSearch`.
 func regexSearch(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Value, error) {
-	str, pos, err := checkParams(p, str, pos, endpos)
+	err := checkParams(p, str, &pos, &endpos)
 	if err != nil {
 		return nil, err
 	}
 
-	match, err := findMatch(p.re, str.value, pos, false)
+	s := str.value[:endpos]
+
+	match, err := findMatch(p.re, s, pos, false)
 	if err != nil {
 		return nil, err
 	}
@@ -469,29 +471,26 @@ func regexSearch(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Value, e
 		return starlark.None, nil
 	}
 
-	return newMatch(p, str, match, 0, len(str.value)), nil
+	return newMatch(p, str, match, pos, endpos), nil
 }
 
 // checkParams checks, if the parameter `str` matches the expected type of the raw pattern of `p`.
 // If it does not match, an error is returned.
-// The parameters `pos` and `endpos` are limited to the range [0, n], where `n` is the length of `str`.
-// This function returns `s[:endpos]` and `pos`, where `pos` and `endpos` have been adjusted.
-func checkParams(p *Pattern, str strOrBytes, pos, endpos int) (strOrBytes, int, error) {
-	var zero strOrBytes
-
+// The parameters `pos` and `endpos` are limited to the range [0, n], where `n` is the length of `str`
+// and writes the adjusted values back.
+func checkParams(p *Pattern, str strOrBytes, pos, endpos *int) error {
 	err := p.pattern.sameType(str)
 	if err != nil {
-		return zero, 0, err
+		return err
 	}
 
 	// Adjust boundaries
 	n := len(str.value)
-	pos = clamp(pos, n)
-	endpos = clamp(endpos, n)
 
-	str.value = str.value[:endpos]
+	*pos = clamp(*pos, n)
+	*endpos = clamp(*endpos, n)
 
-	return str, pos, nil
+	return nil
 }
 
 // clamp limits `pos` between 0 and `length`.
@@ -521,21 +520,23 @@ func reMatch(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, 
 
 // regexMatch - see `reMatch`.
 func regexMatch(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Value, error) {
-	str, pos, err := checkParams(p, str, pos, endpos)
+	err := checkParams(p, str, &pos, &endpos)
 	if err != nil {
 		return nil, err
 	}
 
-	match, err := findMatch(p.re, str.value, pos, false)
+	s := str.value[:endpos]
+
+	match, err := findMatch(p.re, s, pos, false)
 	if err != nil {
 		return nil, err
 	}
 
-	if match == nil || (len(match) > 0 && match[0] != pos) {
+	if match == nil || match[0] != pos {
 		return starlark.None, nil
 	}
 
-	return newMatch(p, str, match, 0, len(str.value)), nil
+	return newMatch(p, str, match, pos, endpos), nil
 }
 
 // reFullMatch return a corresponding `Match`, if the whole string matches the regex pattern.
@@ -560,25 +561,23 @@ func reFullmatch(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tup
 
 // regexFullmatch - see `reFullmatch`.
 func regexFullmatch(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Value, error) {
-	str, pos, err := checkParams(p, str, pos, endpos)
+	err := checkParams(p, str, &pos, &endpos)
 	if err != nil {
 		return nil, err
 	}
 
-	match, err := findMatch(p.re, str.value, pos, true /* find longest */)
+	s := str.value[:endpos]
+
+	match, err := findMatch(p.re, s, pos, true /* find longest */)
 	if err != nil {
 		return nil, err
 	}
 
-	if match == nil || len(match) < 2 {
+	if match == nil || match[0] != pos || match[1] != endpos {
 		return starlark.None, nil
 	}
 
-	if match[0] != pos || match[1] != len(str.value) {
-		return starlark.None, nil
-	}
-
-	return newMatch(p, str, match, 0, len(str.value)), nil
+	return newMatch(p, str, match, pos, endpos), nil
 }
 
 // reSplit splits a string by the occurrences of a pattern.
@@ -639,12 +638,12 @@ func reFindall(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple
 
 // regexFindall - see `reFindAll`.
 func regexFindall(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Value, error) {
-	str, pos, err := checkParams(p, str, pos, endpos)
+	err := checkParams(p, str, &pos, &endpos)
 	if err != nil {
 		return nil, err
 	}
 
-	s := str.value
+	s := str.value[:endpos]
 	var l []starlark.Value
 
 	err = findMatches(p.re, s, pos, 0, func(match []int) error {
@@ -707,14 +706,15 @@ func reFinditer(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tupl
 
 // regexFinditer - see `reFinditer`.
 func regexFinditer(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Value, error) {
-	str, pos, err := checkParams(p, str, pos, endpos)
+	err := checkParams(p, str, &pos, &endpos)
 	if err != nil {
 		return nil, err
 	}
 
+	s := str.value[:endpos]
 	var v starlark.Tuple
 
-	err = findMatches(p.re, str.value, pos, 0, func(match []int) error {
+	err = findMatches(p.re, s, pos, 0, func(match []int) error {
 		v = append(v, newMatch(p, str, match, pos, endpos))
 		return nil
 	})
@@ -1112,12 +1112,10 @@ func patternSub(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tupl
 type Match struct {
 	pattern *Pattern
 	str     strOrBytes
+	pos     int
+	endpos  int
 
-	// first group: whole match
-	groups []group
-
-	pos       int
-	endpos    int
+	groups    []group // first group represents the whole match
 	lastIndex int
 }
 
@@ -1164,10 +1162,10 @@ func newMatch(p *Pattern, str strOrBytes, a []int, pos, endpos int) *Match {
 	m := Match{
 		pattern: p,
 		str:     str,
+		pos:     pos,
+		endpos:  endpos,
 
 		groups:    groups,
-		pos:       pos,
-		endpos:    endpos,
 		lastIndex: lastIndex,
 	}
 
@@ -1258,7 +1256,7 @@ var matchMembers = map[string]func(m *Match) starlark.Value{
 			return starlark.None
 		}
 
-		return m.str.asType(name)
+		return starlark.String(name)
 	},
 	"re":     func(m *Match) starlark.Value { return m.pattern },
 	"string": func(m *Match) starlark.Value { return m.str.asType(m.str.value) },
@@ -1314,6 +1312,41 @@ func (m *Match) Get(v starlark.Value) (starlark.Value, bool, error) {
 	return g, true, nil
 }
 
+// group returns the group with the given key.
+func (m *Match) group(v starlark.Value) (starlark.Value, error) {
+	i, err := m.getIndex(v)
+	if err != nil {
+		return nil, err
+	}
+
+	g := &m.groups[i]
+	if g.empty() {
+		return starlark.None, nil
+	}
+
+	return m.str.asType(m.groupStr(g)), nil
+}
+
+// getIndex converts the group key into a valid integer index for one of the groups of this match.
+// The key must be either of type `int` or `str`. Keys of type int are used as indices and keys
+// of type str are used as group names. If the index key is out of range, does not exist or has
+// an invalid type, then an index error is returned.
+func (m *Match) getIndex(v starlark.Value) (int, error) {
+	switch t := v.(type) {
+	case starlark.Int:
+		i, ok := t.Int64()
+		if ok && i >= 0 && i < int64(len(m.groups)) {
+			return int(i), nil
+		}
+	case starlark.String:
+		if i := m.pattern.re.SubexpIndex(string(t)); i >= 0 {
+			return i, nil
+		}
+	}
+
+	return 0, errors.New("IndexError: no such group")
+}
+
 // CompareSameType compares this matches to another one.
 // It is only supported, to compare matches for equality and inequality.
 func (m *Match) CompareSameType(op syntax.Token, y starlark.Value, _ int) (bool, error) {
@@ -1344,40 +1377,6 @@ func matchEquals(x, y *Match) bool {
 	}
 
 	return x.pos == y.pos && x.endpos == y.endpos && x.lastIndex == y.lastIndex
-}
-
-// group returns the group with the given key.
-func (m *Match) group(v starlark.Value) (starlark.Value, error) {
-	if i, ok := m.getIndex(v); ok {
-		g := &m.groups[i]
-		if g.empty() {
-			return starlark.None, nil
-		}
-
-		return m.str.asType(m.groupStr(g)), nil
-	}
-
-	return nil, errors.New("IndexError: no such group")
-}
-
-// getIndex converts the group key into a valid integer index for one of the groups of this match.
-// The key must be either of type `int` or `str`. Keys of type int are used as indices and keys
-// of type str are used as group names. If the index key is out of range, does not exist or has
-// an invalid type, then the second return value is false.
-func (m *Match) getIndex(v starlark.Value) (int, bool) {
-	switch t := v.(type) {
-	case starlark.Int:
-		i, ok := t.Int64()
-		if ok && i >= 0 && i < int64(len(m.groups)) {
-			return int(i), true
-		}
-	case starlark.String:
-		if i := m.pattern.re.SubexpIndex(string(t)); i >= 0 {
-			return i, true
-		}
-	}
-
-	return 0, false
 }
 
 // matchExpand returns the string obtained by doing backslash substitution on
@@ -1510,8 +1509,13 @@ func matchStart(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kw
 
 	m := b.Receiver().(*Match)
 
-	i, ok := m.getIndex(group)
-	if !ok {
+	i, err := m.getIndex(group)
+	if err != nil {
+		return nil, err
+	}
+
+	g := m.groups[i]
+	if g.empty() {
 		return starlark.MakeInt(-1), nil
 	}
 
@@ -1528,8 +1532,13 @@ func matchEnd(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwar
 
 	m := b.Receiver().(*Match)
 
-	i, ok := m.getIndex(group)
-	if !ok {
+	i, err := m.getIndex(group)
+	if err != nil {
+		return nil, err
+	}
+
+	g := m.groups[i]
+	if g.empty() {
 		return starlark.MakeInt(-1), nil
 	}
 
@@ -1545,8 +1554,13 @@ func matchSpan(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwa
 
 	m := b.Receiver().(*Match)
 
-	i, ok := m.getIndex(group)
-	if !ok {
+	i, err := m.getIndex(group)
+	if err != nil {
+		return nil, err
+	}
+
+	g := m.groups[i]
+	if g.empty() {
 		v := starlark.MakeInt(-1)
 		return starlark.Tuple{v, v}, nil
 	}

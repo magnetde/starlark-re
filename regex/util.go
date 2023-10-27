@@ -4,8 +4,6 @@ import (
 	"slices"
 	"strings"
 	"unicode"
-
-	"github.com/magnetde/starlark-re/util"
 )
 
 // isASCIIString checks, if the string only contains ASCII characters.
@@ -76,19 +74,6 @@ func lookupUnicodeName(name string) (rune, bool) {
 	}
 
 	return unicodeCodepoints[i], true
-}
-
-// asciiEscape replaces all non-printable characters in a string with their respective
-// escape sequence and replaces non-ascii bytes with an hexadecimal escape sequence.
-func asciiEscape(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-
-	for i := 0; i < len(s); i++ {
-		util.WriteEscapedByte(&b, s[i], false)
-	}
-
-	return b.String()
 }
 
 // isIdentifier checks, whether name is a valid unicode identifier.
