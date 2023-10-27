@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"regexp/syntax"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 	"unsafe"
 
@@ -95,6 +96,7 @@ func Compile(pattern string, isStr bool, flags uint32, fallbackEnabled bool) (En
 		e = &stdRegex{
 			re:     r,
 			flags:  flags,
+			isStr:  isStr,
 			numCap: numCap(r),
 		}
 	} else {
@@ -123,6 +125,7 @@ func Compile(pattern string, isStr bool, flags uint32, fallbackEnabled bool) (En
 		e = &fallbEngine{
 			re:         r2,
 			flags:      flags,
+			isStr:      isStr,
 			numSubexp:  numCapFallb(r2) - 1,
 			groupNames: p.groupNames(),
 		}
@@ -157,6 +160,7 @@ func numCapFallb(r *regexp2.Regexp) int {
 type stdRegex struct {
 	re     *regexp.Regexp
 	flags  uint32
+	isStr  bool
 	numCap int
 }
 
@@ -171,6 +175,7 @@ type stdInput struct {
 type fallbEngine struct {
 	re         *regexp2.Regexp
 	flags      uint32
+	isStr      bool
 	numSubexp  int
 	groupNames map[string]int // fallback preprocessor removes group names, so the original mapping must be saved
 }
@@ -218,7 +223,7 @@ func (r *stdRegex) SupportsLongest() bool {
 
 // BuildInput is the implementation of the `BuildInput` function for the `Engine` interface.
 func (r *stdRegex) BuildInput(s string) Input {
-	s, offsets := replaceInvalidChars(s)
+	s, offsets := r.replaceInvalidChars(s)
 
 	i := &stdInput{
 		re:      r,
@@ -230,13 +235,19 @@ func (r *stdRegex) BuildInput(s string) Input {
 }
 
 // replaceInvalidChars replaces invalid UTF-8 codepoints with legal ones.
-// This is necessary because the Go regex engine crequires valid UTF-8 codepoints instead of
-// arbitrary bytes, value is passed to the `doExecute` function instead of a string.
+// This is necessary because the Go regex engine requires valid UTF-8 codepoints instead of
+// arbitrary bytes, even if a bytes value is passed to the `doExecute` function instead of a string.
 // If the string does not contain any invalid illegal UTF-8 codepoints,
 // it is returned without modification, and no offset slice is returned.
-func replaceInvalidChars(s string) (string, []int) {
-	if utf8.ValidString(s) { // if no invalid utf8 values exists, wie can skip the everything else
-		return s, nil
+func (r *stdRegex) replaceInvalidChars(s string) (string, []int) {
+	if r.isStr {
+		if utf8.ValidString(s) { // skip if no invalid utf8 values exist
+			return s, nil
+		}
+	} else {
+		if isASCIIString(s) { // skip if only ascii characters exist
+			return s, nil
+		}
 	}
 
 	var b strings.Builder
@@ -245,30 +256,49 @@ func replaceInvalidChars(s string) (string, []int) {
 	offsets := make([]int, 0, len(s)+4+1) // reserve 4 extra offsets (+1 for the last offset)
 	offset := 0
 
-	for len(s) > 0 {
-		ch, size := utf8.DecodeRuneInString(s)
+	if r.isStr {
+		for len(s) > 0 {
+			// Get the next UTF-8 codepoint
+			c, size := utf8.DecodeRuneInString(s)
 
-		if ch != utf8.RuneError {
-			b.WriteRune(ch)
+			if c != utf8.RuneError {
+				b.WriteRune(c)
 
-			for i := 0; i < size; i++ {
-				offsets = append(offsets, offset)
+				for i := 0; i < size; i++ {
+					offsets = append(offsets, offset)
+				}
+			} else {
+				b.WriteRune(rune(s[0]))
+
+				// At this point, if `s[0]` is in range 128-255,
+				// then `t` is in either of the format '\xc2\x..' or '\xc3\x..'.
+				// So, two offsets should be added to the offset slice.
+				// As an additional element has been appended to the string,
+				// which previously did not exist, so the second offset must be decreased accordingly.
+				offsets = append(offsets, offset, offset-1)
+				offset--
 			}
-		} else {
-			t := string(s[0])
-			b.WriteString(t)
 
-			// At this point, if `s[0]` is in range 128-255,
-			// then `t` is in either of the format '\xc2\x..' or '\xc3\x..'.
-			// So, two offsets should be added to the offset slice.
-			// As an additional element has been appended to the string,
-			// which previously did not exist, so the second offset must be decreased accordingly.
-			offsets = append(offsets, offset, offset-1)
-			offset--
+			// If the character is not valid, the size returned is 1, so slicing with `size` is corrent.
+			s = s[size:]
 		}
+	} else {
+		// Iterate over the bytes in `s` instead of characters.
+		for i := 0; i < len(s); i++ {
+			c := s[i]
+			if c <= unicode.MaxASCII {
+				b.WriteByte(c)
 
-		// If the character is not valid, the size returned is 1, so slicing with `size` is corrent.
-		s = s[size:]
+				// Do not increase the offset for ASCII characters.
+				offsets = append(offsets, offset)
+			} else {
+				b.WriteRune(rune(c))
+
+				// See the comment above for invalid characters at strings.
+				offsets = append(offsets, offset, offset-1)
+				offset--
+			}
+		}
 	}
 
 	// Append a last offset value, that corresponds to `len(s)`.
@@ -362,7 +392,7 @@ func (r *fallbEngine) SupportsLongest() bool {
 
 // BuildInput is the implementation of the `BuildInput` function for the `Engine` interface.
 func (r *fallbEngine) BuildInput(s string) Input {
-	chars, offsetsRune, offsetsByte := getRuneOffsets(s)
+	chars, offsetsRune, offsetsByte := r.getRuneOffsets(s)
 
 	return &fallbInput{
 		re:          r,
@@ -373,24 +403,30 @@ func (r *fallbEngine) BuildInput(s string) Input {
 }
 
 // getRuneOffsets transforms the string into a slice of character to be compatible with the`regexp2.Regexp` regex engine.
-// Additionally, any invalid UTF-8 codepoints are replaced with legal ones.
+// Additionally, any invalid UTF-8 codepoints are replaced with valid ones.
 // Two offset slices are needed to be created for this engine; one to convert the byte positions
 // in the input string `s` to corresponding offsets in the modified character slice (of type `[]rune`),
 // and another one to convert the character positions in the modified character slice back to byte
 // positions in the original input string `s`.
 // If the string contains only ASCII characters, creating offset slices is not needed.
-func getRuneOffsets(s string) ([]rune, []int, []int) {
-	if isASCIIString(s) { // if the string has only ASCII characters, offsets are not necessary
-		return []rune(s), nil, nil
-	}
-
+func (r *fallbEngine) getRuneOffsets(s string) ([]rune, []int, []int) {
 	chars := make([]rune, 0, len(s))
 
+	if !r.isStr || isASCIIString(s) {
+		// For ascii strings and bytes, all bytes are converted to its rune value and positions will not change.
+		for i := 0; i < len(s); i++ {
+			chars = append(chars, rune(s[i]))
+		}
+
+		return chars, nil, nil
+	}
+
 	offsetsRune := make([]int, 0, len(s))   // convert byte positions to character positions offsets
-	offsetsByte := make([]int, 0, len(s)+4) // convert character positions to byte positions and reserve 4 extra offsets
+	offsetsByte := make([]int, 0, len(s)+4) // convert character positions to byte positions; reserve 4 extra offsets
 	offsetByte := 0                         // `offsetByte` is the current difference in positions between character and bytes
 
 	for len(s) > 0 {
+		// Get the next UTF-8 codepoint
 		c, size := utf8.DecodeRuneInString(s)
 		incr := size
 

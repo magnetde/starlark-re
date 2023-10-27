@@ -2148,7 +2148,7 @@ def test_ascii_and_unicode_flag():
     pat = re.compile(r'(?a)\w')
     assertIsNone(pat.match('\u00E0'))
     # Bytes patterns
-    for flags in [re.ASCII]:
+    for flags in (0, re.ASCII):
         pat = re.compile(b'\xc0', flags | re.IGNORECASE)
         assertIsNone(pat.match(b'\xe0'))
         pat = re.compile(b'\\w', flags)
@@ -2895,6 +2895,16 @@ def test_re_benchmarks():
         assertTrue(p.match(s2, 10000, 10000 + len(s)))
         assertTrue(p.fullmatch(s2, 10000, 10000 + len(s)))
 
+# decode a string from ascii
+def decode_ascii(s):
+    b = []
+    for c in s.codepoint_ords():
+        if c >= 128:
+            return None
+        b.append(c)
+
+    return bytes(b)
+
 def test_re_tests():
     're_tests test suite'
     for t in tests:
@@ -2946,11 +2956,12 @@ def test_re_tests():
 
         # Try the match with both pattern and string converted to
         # bytes, and check that it still succeeds.
-        bpat = bytes(pattern)
-        bs = bytes(s)
+        bpat = decode_ascii(pattern)
+        bs = decode_ascii(s)
 
-        obj = re.compile(bpat)
-        assertTrue(obj.search(bs))
+        if bpat != None and bs != None:
+            obj = re.compile(bpat)
+            assertTrue(obj.search(bs))
 
         # Try the match with the search area limited to the extent
         # of the match and see if it still succeeds.  \B will

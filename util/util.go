@@ -11,18 +11,19 @@ var hexDigits = "0123456789abcdef"
 // Repr returns a representation of an string.
 // The `isString` parameter determines whether the string should be treated as a string or a bytes object.
 func Repr(s string, isString bool) string {
-	return stringRepr(s, isString)
+	return stringRepr(s, isString, true)
 }
 
 // ASCII returns a string that escapes all non-printable or non-ASCII characters.
 // The `isString` parameter determines whether the string should be treated as a string or a bytes object.
 func ASCII(s string, isString bool) string {
-	return ASCIIReplace(stringRepr(s, isString))
+	return ASCIIReplace(stringRepr(s, isString, false))
 }
 
 // stringRepr returns a string representation of the string.
 // The `isString` parameter determines whether the string should be interpreted as a string or a bytes object.
-func stringRepr(s string, isString bool) string {
+// If `bPrefix` is set to true, an "b" prefix will be prepended to the string.
+func stringRepr(s string, isString bool, bPrefix bool) string {
 	var b strings.Builder
 	b.Grow(len(s) + 3)
 
@@ -33,7 +34,7 @@ func stringRepr(s string, isString bool) string {
 		quote = '"'
 	}
 
-	if !isString {
+	if !isString && bPrefix {
 		b.WriteByte('b')
 	}
 

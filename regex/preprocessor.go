@@ -84,16 +84,18 @@ func (p *preprocessor) stdPattern() string {
 	var b strings.Builder
 
 	flags := p.flags()
-	if flags&FlagIgnoreCase != 0 && flags&FlagASCII != 0 {
-		// Remove the IGNORECASE flag if it is enabled together with the ASCII flag,
-		// because the preprocessor handles the case ignoring for ASCII characters.
-		flags &= ^FlagIgnoreCase
+	if flags&FlagIgnoreCase != 0 {
+		if flags&FlagASCII != 0 || !p.isStr {
+			// Remove the IGNORECASE flag if it is enabled together with the ASCII flag or if the current
+			// pattern is of type bytes, because then the preprocessor handles the case ignoring.
+			flags &= ^FlagIgnoreCase
+		}
 	}
 
 	if flags&supportedFlags != 0 {
 		b.WriteString("(?")
 
-		if flags&FlagIgnoreCase != 0 && flags&FlagASCII == 0 {
+		if flags&FlagIgnoreCase != 0 {
 			b.WriteByte('i')
 		}
 		if flags&FlagMultiline != 0 {
@@ -167,8 +169,8 @@ func (p *preprocessor) defaultReplacer(w *subPatternWriter, n *regexNode, ctx *s
 
 	if flags&FlagUnicode != 0 {
 		unicode = true
-	} else if flags&FlagIgnoreCase != 0 && flags&FlagASCII != 0 {
-		asciiCase = true
+	} else if flags&FlagIgnoreCase != 0 {
+		asciiCase = flags&FlagASCII != 0 || !p.isStr
 	}
 
 	switch n.opcode {

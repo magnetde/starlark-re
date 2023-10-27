@@ -41,36 +41,47 @@ func (s *source) seek(pos int) {
 	s.cur = s.orig[pos:]
 }
 
-// read reads the next UTF-8 character.
+// read reads the next character.
 // If the current reading position is at the end of the string, then the second return value is false.
-// If the next character does not represent a valid UTF-8 character, then the next byte is returned.
 // After reading, the current reading position is increased.
 func (s *source) read() (rune, bool) {
-	if len(s.cur) == 0 {
+	c, size, ok := s.next()
+	if !ok {
 		return 0, false
 	}
 
-	c, size := utf8.DecodeRuneInString(s.cur)
-	if c == utf8.RuneError {
-		c = rune(s.cur[0])
-		size = 1
+	s.cur = s.cur[size:]
+	return c, true
+}
+
+// next returns the next character.
+// If the current reading position is at the end of the string, then the last return value is false.
+// If the next character does not represent a valid UTF-8 character or if
+// the string represents a bytes object, then the next byte is returned.
+func (s *source) next() (rune, int, bool) {
+	if len(s.cur) == 0 {
+		return 0, 0, false
 	}
 
-	s.cur = s.cur[size:]
+	if s.isStr {
+		c, size := utf8.DecodeRuneInString(s.cur)
+		if c == utf8.RuneError {
+			c = rune(s.cur[0])
+			size = 1
+		}
 
-	return c, true
+		return c, size, true
+	} else {
+		return rune(s.cur[0]), 1, true
+	}
 }
 
 // peek determines the next UTF-8 character.
 // This function is similar to `read()`, but the current reading position is not incremented.
 func (s *source) peek() (rune, bool) {
-	if len(s.cur) == 0 {
+	c, _, ok := s.next()
+	if !ok {
 		return 0, false
-	}
-
-	c, _ := utf8.DecodeRuneInString(s.cur)
-	if c == utf8.RuneError {
-		c = rune(s.cur[0])
 	}
 
 	return c, true
@@ -104,13 +115,13 @@ func (s *source) getUntil(c rune, name string) (string, error) {
 // match returns, whether the next character matches the given character.
 // If it does, the reading position is then moved to the next character.
 func (s *source) match(c rune) bool {
-	ch, width := utf8.DecodeRuneInString(s.cur)
-	if ch == c {
-		s.cur = s.cur[width:]
-		return true
+	ch, size, ok := s.next()
+	if !ok || ch != c {
+		return false
 	}
 
-	return false
+	s.cur = s.cur[size:]
+	return true
 }
 
 // nextInt returns the decimal integer at the current reading position.
@@ -183,7 +194,7 @@ func (s *source) checkGroupName(name string, offset int) error {
 		return s.erroro("bad character in group name "+util.ASCII(name, s.isStr), len(name)+offset)
 	}
 	if !isIdentifier(name) {
-		return s.erroro("bad character in group name "+util.Repr(name, s.isStr), len(name)+offset)
+		return s.erroro("bad character in group name "+util.Repr(name, true), len(name)+offset)
 	}
 	return nil
 }
@@ -194,7 +205,7 @@ func (s *source) checkGroupName(name string, offset int) error {
 // is also added to the error message.
 func (s *source) errorp(msg string, pos int) error {
 	if !s.isStr {
-		msg = asciiEscape(msg)
+		msg = util.ASCIIReplace(msg)
 	}
 
 	msg = fmt.Sprintf("%s at position %d", msg, pos)
