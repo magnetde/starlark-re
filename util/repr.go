@@ -49,11 +49,11 @@ func stringRepr(s string, isString bool, bPrefix bool) string {
 			size = 1
 		}
 
-		// Handle utf8 errors
+		// Handle utf8 errors; should not happen
 		if ch == utf8.RuneError {
 			b.WriteString(`\x`)
-			b.WriteByte(hexDigits[(s[0]>>4)&0x000F])
-			b.WriteByte(hexDigits[s[0]&0x000F])
+			b.WriteByte(hexDigits[(s[0]>>4)&0xf])
+			b.WriteByte(hexDigits[s[0]&0xf])
 
 			size = 1
 			continue
@@ -78,9 +78,9 @@ func stringRepr(s string, isString bool, bPrefix bool) string {
 			b.WriteByte('r')
 		} else if ch < ' ' || ch == unicode.MaxASCII { // Map non-printable US ASCII to '\xhh' */
 			b.WriteString(`\x`)
-			b.WriteByte(hexDigits[(ch>>4)&0x000F])
-			b.WriteByte(hexDigits[ch&0x000F])
-		} else if !unicode.IsPrint(ch) { // Escpae non-printable characters
+			b.WriteByte(hexDigits[(ch>>4)&0xf])
+			b.WriteByte(hexDigits[ch&0xf])
+		} else if !unicode.IsPrint(ch) || (!isString && ch > unicode.MaxASCII) { // Escape non-printable characters
 			hexEscape(&b, ch)
 		} else { // Copy characters as-is
 			b.WriteRune(ch)
@@ -97,29 +97,28 @@ func hexEscape(w *strings.Builder, ch rune) {
 	w.WriteByte('\\')
 	if ch <= 0xff { // Map 8-bit characters to '\xhh'
 		w.WriteByte('x')
-		w.WriteByte(hexDigits[(ch>>4)&0x000F])
-		w.WriteByte(hexDigits[ch&0x000F])
+		w.WriteByte(hexDigits[(ch>>4)&0xf])
+		w.WriteByte(hexDigits[ch&0xf])
 	} else if ch <= 0xffff { // Map 16-bit characters to '\uxxxx'
 		w.WriteByte('u')
-		w.WriteByte(hexDigits[(ch>>12)&0xF])
-		w.WriteByte(hexDigits[(ch>>8)&0xF])
-		w.WriteByte(hexDigits[(ch>>4)&0xF])
-		w.WriteByte(hexDigits[ch&0xF])
+		w.WriteByte(hexDigits[(ch>>12)&0xf])
+		w.WriteByte(hexDigits[(ch>>8)&0xf])
+		w.WriteByte(hexDigits[(ch>>4)&0xf])
+		w.WriteByte(hexDigits[ch&0xf])
 	} else { // Map 21-bit characters to '\U00xxxxxx'
 		w.WriteByte('U')
-		w.WriteByte(hexDigits[(ch>>28)&0xF])
-		w.WriteByte(hexDigits[(ch>>24)&0xF])
-		w.WriteByte(hexDigits[(ch>>20)&0xF])
-		w.WriteByte(hexDigits[(ch>>16)&0xF])
-		w.WriteByte(hexDigits[(ch>>12)&0xF])
-		w.WriteByte(hexDigits[(ch>>8)&0xF])
-		w.WriteByte(hexDigits[(ch>>4)&0xF])
-		w.WriteByte(hexDigits[ch&0xF])
+		w.WriteByte(hexDigits[(ch>>28)&0xf])
+		w.WriteByte(hexDigits[(ch>>24)&0xf])
+		w.WriteByte(hexDigits[(ch>>20)&0xf])
+		w.WriteByte(hexDigits[(ch>>16)&0xf])
+		w.WriteByte(hexDigits[(ch>>12)&0xf])
+		w.WriteByte(hexDigits[(ch>>8)&0xf])
+		w.WriteByte(hexDigits[(ch>>4)&0xf])
+		w.WriteByte(hexDigits[ch&0xf])
 	}
 }
 
-// ASCIIReplace replaces all non-printable characters in a string with their respective
-// escape sequence and replaces non-ascii bytes with an hexadecimal escape sequence.
+// ASCIIReplace replaces all non-ascii bytes with an hexadecimal escape sequence.
 func ASCIIReplace(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))

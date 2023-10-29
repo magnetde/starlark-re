@@ -144,7 +144,7 @@ func getFlag(c rune) uint32 {
 		return FlagASCII
 	case 'u':
 		return FlagUnicode
-	default:
+	default: // should never happen
 		return 0
 	}
 }

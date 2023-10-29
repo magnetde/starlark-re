@@ -29,6 +29,12 @@ const (
 	// maxRepeat is the maximum repeat count for the parser; the regex engines may have a lower maximum repeat value.
 	maxRepeat = math.MaxInt
 
+	// maxRepeatEngine is the maximum repeat count for the regex engine
+	maxRepeatEngine = 1000
+
+	// assert, that the maximum repeat count for the parser is higher than the maximum repeat count of the engines
+	_ uint = maxRepeat - maxRepeatEngine
+
 	// maxGroups is used as the maximum number of groups for the parser; the regex engines may have a lower maximum number of groups.
 	maxGroups = math.MaxInt / 2
 )
