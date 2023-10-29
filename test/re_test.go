@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -48,7 +49,10 @@ func TestRe(t *testing.T) {
 
 // runTests executes "re_test.py".
 func runTests(t *testing.T, re *re.Module) error {
-	predeclared := starlark.StringDict{"re": re}
+	predeclared := starlark.StringDict{
+		"re":        re,
+		"MAXREPEAT": starlark.MakeInt(math.MaxInt32),
+	}
 
 	helpers := map[string]func(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error){
 		"same":           sameHelper,

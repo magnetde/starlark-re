@@ -85,7 +85,8 @@ These unsupported elements include:
 - lookahead and lookbehind: `(?=...)`, `(?<=...)`, `(?!...)` or `(?<!...)`
 - backreferences: e.g, `\1` or `(?P=name)`
 - conditional expression: `(?(id/name)yes-pattern|no-pattern)`
-- possessive repeat: `?+`, `*+`, `++`, `{...}+`
+- repetition of type `{m,n}` where `m` or `n` exceeds 1000
+- possessive repetition: `?+`, `*+`, `++`, `{...}+`
 
 If the regular expression pattern does not include any unsupported elements, it is preprocessed and
 then compiled with the default regex engine.

@@ -71,7 +71,7 @@ type Input interface {
 // Compile compiles the Python-compatible regex pattern and return a regex engine.
 // If the fallback engine (`regexp2.Regexp`) is enabled and either unsupported subpatterns exist or
 // the FALLBACK flag is enabled, then the fallback engine is used. Otherwise, the preprocessed regex
-// pattern is compiled using the standard regex engine (regexp.Regexp). If the DEBUG flag is enabled,
+// pattern is compiled using the default regex engine (regexp.Regexp). If the DEBUG flag is enabled,
 // the second return value is be a debug description of the parsed regex pattern.
 func Compile(pattern string, isStr bool, flags uint32, fallbackEnabled bool) (Engine, string, error) {
 	// Create a preprocessor of the regex string to replace unicode patterns,

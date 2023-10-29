@@ -128,7 +128,7 @@ func isFlag(c rune) bool {
 // If the character is invalid for a flag, the function will return 0.
 func getFlag(c rune) uint32 {
 	switch c {
-	// standard flags
+	// default flags
 	case 'i':
 		return FlagIgnoreCase
 	case 'L':

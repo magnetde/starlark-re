@@ -134,7 +134,7 @@ var unicodeRanges = map[catcode]string{
 // (1) If the unicode flag is present for the current regex node of type "CATEGORY", then the category is
 // replaced by a character set that includes or excludes all unicode variants belonging to the regex category.
 // The simplest case is to replace the category with the corresponding unicode character classes (`\p{}...`).
-// This is possible if the standard regular expression engine is used. Also, if the category is not negated or
+// This is possible if the default regular expression engine is used. Also, if the category is not negated or
 // is the only element in the character set, it can be used without modification. Otherwise, the category must
 // be replaced with the ranges of characters included in the character class.
 // The two other types of regex nodes which need to be rewritten are only affected if both the ASCII and
@@ -187,7 +187,7 @@ func (p *preprocessor) defaultReplacer(w *subPatternWriter, n *regexNode, ctx *s
 		category := n.params.(catcode)
 
 		// Check if the shorter unicode character sets can be added to the regex, which are only fully
-		// supported by the standard regex engine. Also, they can only be used if the current category does
+		// supported by the default regex engine. Also, they can only be used if the current category does
 		// not negate the set or if the current category regex node is the only element in the character set.
 		// Although including the negated character class of `\d` in a character set (by using `\P{Nd}`) is
 		// straightforward, it is not trivial to include the negated character of `\w` (which has an unicode

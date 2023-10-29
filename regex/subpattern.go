@@ -79,7 +79,7 @@ func (p *subPattern) isUnsupported() bool {
 // isUnsupported returns, whether the regex node is not supported by the regexp engine `regex.Regexp`.
 // Currently, the following regex node types are not supported:
 // ASSERT, ASSERT_NOT, GROUPREF, GROUPREF_EXISTS, ATOMIC_GROUP, POSSESSIVE_REPEAT, FAILURE and AT with the AT_END_STRING position.
-// If the regex node is a repetion with the format `{m,n}` and the minimum and maximum repetion counts exceed the value `maxRepeatEngine`,
+// If the regex node is a repetition of type `{m,n}` and the minimum and maximum repetion counts exceed the value `maxRepeatEngine`,
 // then the regex node is also not supported.
 func isUnsupported(n *regexNode) bool {
 	switch n.opcode {
@@ -107,7 +107,7 @@ func isUnsupported(n *regexNode) bool {
 		p := n.params.(repeatParams)
 
 		if p.min > 1 || p.max < maxRepeat {
-			// the repetition has the format `{m,n}`
+			// the repetition is of type `{m,n}`
 			if p.min > maxRepeatEngine || p.max > maxRepeatEngine {
 				return true
 			}

@@ -8,6 +8,7 @@
 # Add dummy assignments to fix Python warnings.
 
 re = re # type: ignore
+MAXREPEAT = MAXREPEAT # type: ignore
 same = same # type: ignore
 measure = measure # type: ignore
 trycatch = trycatch # type: ignore
@@ -2265,12 +2266,12 @@ def test_bug_16688():
 def test_repeat_minmax_overflow():
     # Issue #13169
     string = "x" * 100000
-    assertEqual(re.match(r".{1000}", string).span(), (0, 1000))
-    assertEqual(re.match(r".{,1000}", string).span(), (0, 1000))
-    assertEqual(re.match(r".{1000,}?", string).span(), (0, 1000))
-    assertRaises(lambda: re.match(r".{1001}", string))
-    assertRaises(lambda: re.match(r".{,1001}", string))
-    assertRaises(lambda: re.match(r".{1001,}?", string))
+    assertEqual(re.match(r".{65535}", string).span(), (0, 65535))
+    assertEqual(re.match(r".{,65535}", string).span(), (0, 65535))
+    assertEqual(re.match(r".{65535,}?", string).span(), (0, 65535))
+    assertEqual(re.match(r".{65536}", string).span(), (0, 65536))
+    assertEqual(re.match(r".{,65536}", string).span(), (0, 65536))
+    assertEqual(re.match(r".{65536,}?", string).span(), (0, 65536))
     # 1<<128 should be big enough to overflow both SRE_CODE and Py_ssize_t.
     assertRaises(lambda: re.compile(r".{%d}" % 1<<128))
     assertRaises(lambda: re.compile(r".{,%d}" % 1<<128))
@@ -2872,15 +2873,15 @@ def test_flags_repr():
     assertEqual(repr(~(re.I|re.S|re.X|(1<<20))), "-1048659")
 
 def test_repeat_minmax_overflow_maxrepeat():
-    MAXREPEAT = 1000
-    string = "x" * (MAXREPEAT // 2)
-    assertIsNone(re.match(r".{%d}" % MAXREPEAT, string))
-    assertEqual(re.match(r".{,%d}" % MAXREPEAT, string).span(),
-                (0, len(string)))
-    assertIsNone(re.match(r".{%d,}?" % MAXREPEAT, string))
-    assertRaises(lambda: re.compile(r".{%d}" % (MAXREPEAT + 1)))
-    assertRaises(lambda: re.compile(r".{,%d}" % (MAXREPEAT + 1)))
-    assertRaises(lambda: re.compile(r".{%d,}?" % (MAXREPEAT + 1)))
+    # MAXREPEAT provided as a global variable
+    string = "x" * 100000
+    assertIsNone(re.match(r".{%d}" % (MAXREPEAT - 1), string))
+    assertEqual(re.match(r".{,%d}" % (MAXREPEAT - 1), string).span(),
+                (0, 100000))
+    assertIsNone(re.match(r".{%d,}?" % (MAXREPEAT - 1), string))
+    assertRaises(lambda: re.compile(r".{%d}" % MAXREPEAT))
+    assertRaises(lambda: re.compile(r".{,%d}" % MAXREPEAT))
+    assertRaises(lambda: re.compile(r".{%d,}?" % MAXREPEAT))
 
 def test_re_benchmarks():
     're_tests benchmarks'
@@ -3248,6 +3249,36 @@ def test_match_lastindex():
     assertEqual(m.lastindex, 1)
     assertEqual(m.lastgroup, 'name')
 
+def test_possessive_repeat_err():
+    assertRaises(lambda: re.compile(r'.?+'))
+    assertRaises(lambda: re.compile(r'.*+'))
+    assertRaises(lambda: re.compile(r'.++'))
+    assertRaises(lambda: re.compile(r'.{0,}+'))
+
+def test_debug_flag_2():
+    pat = r'(?!)(?<=\d)(?<!\d)(.+)\1[ab-c\d]{2,}(?i:x)'
+    dump = '''\
+FAILURE
+ASSERT -1
+  IN
+    CATEGORY CATEGORY_DIGIT
+ASSERT_NOT -1
+  IN
+    CATEGORY CATEGORY_DIGIT
+SUBPATTERN 1 0 0
+  MAX_REPEAT 1 MAXREPEAT
+    ANY None
+GROUPREF 1
+MAX_REPEAT 2 MAXREPEAT
+  IN
+    LITERAL 97
+    RANGE (98, 99)
+    CATEGORY CATEGORY_DIGIT
+SUBPATTERN None 2 0
+  LITERAL 120
+'''
+    assertEqual(get_debug_out(pat), dump)
+
 def test_sub_err():
     p = re.compile(r'\w+')
     assertRaises(lambda: p.sub(0, 'word-word'))
@@ -3257,6 +3288,38 @@ def test_sub_err():
     assertRaises(lambda: p.sub(lambda m: b'x', 'word-word'))
     assertRaises(lambda: p.sub(lambda m: fail('failure'), 'word-word'))
 
+def test_repr_ascii():
+    # repr()
+    assertEqual(repr(re.compile(r'\d')), r"re.compile('\\d')")
+    assertEqual(repr(re.compile(b'\\d')), r"re.compile(b'\\d')")
+    assertEqual(repr(re.compile(r"'")), 're.compile("\'")')
+    assertEqual(repr(re.compile(b"'")), 're.compile(b"\'")')
+
+    assertEqual(repr(re.compile('\a\b\f\n\r\t\v')),
+                r"re.compile('\x07\x08\x0c\n\r\t\x0b')")
+    assertEqual(repr(re.compile(b'\a\b\f\n\r\t\v')),
+                r"re.compile(b'\x07\x08\x0c\n\r\t\x0b')")
+    assertEqual(repr(re.compile('\x00a\x7fb\ufeffc')),
+                r"re.compile('\x00a\x7fb\ufeffc')")
+
+    b = re.escape(bytes(range(128, 170)))
+    r = (r"re.compile(b'\x80\x81\x82\x83\x84\x85\x86\x87\x88\x89\x8a\x8b\x8c\x8d\x8e\x8f" +
+         r"\x90\x91\x92\x93\x94\x95\x96\x97\x98\x99\x9a\x9b\x9c\x9d\x9e\x9f\xa0\xa1\xa2" +
+         r"\xa3\xa4\xa5\xa6\xa7\xa8\xa9')")
+    assertEqual(repr(re.compile(b)), r)
+
+def test_template_escape():
+    # special characters should not be escaped
+    p = re.compile(r'[\w]+')
+
+    assertEqual(p.sub(r'.', 'ab-abc'), '.-.')
+    assertEqual(p.sub(r'\.', 'ab-abc'), r'\.-\.')
+    assertEqual(p.sub(r'\.', 'ab-abc'), r'\.-\.')
+    assertEqual(p.sub(r'\.\\', 'ab-abc'), '\\.\\-\\.\\')
+
+def test_max_rune():
+    re.compile(r'\U0010FFFF')
+    assertRaises(lambda: re.compile(r'\U00110000'))
 
 # Run all tests:
 
@@ -3404,5 +3467,10 @@ test_pattern_members()
 test_match_nogroups()
 test_match_groups()
 test_match_lastindex()
+test_possessive_repeat_err()
+test_debug_flag_2()
 test_sub_err()
+test_repr_ascii()
+test_template_escape()
+test_max_rune()
 

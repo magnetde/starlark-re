@@ -27,16 +27,16 @@ const (
 
 const (
 	// maxRepeat is the maximum repeat count for the parser; the regex engines may have a lower maximum repeat value.
-	maxRepeat = math.MaxInt
+	maxRepeat = math.MaxInt32
 
-	// maxRepeatEngine is the maximum repeat count for the regex engine
+	// maxRepeatEngine is the maximum repeat count for the default regex engine.
 	maxRepeatEngine = 1000
 
 	// assert, that the maximum repeat count for the parser is higher than the maximum repeat count of the engines
 	_ uint = maxRepeat - maxRepeatEngine
 
 	// maxGroups is used as the maximum number of groups for the parser; the regex engines may have a lower maximum number of groups.
-	maxGroups = math.MaxInt / 2
+	maxGroups = math.MaxInt32 / 2
 )
 
 // opcode is the type used for regex operators.
