@@ -10,19 +10,20 @@ import "math"
 // See also https://docs.python.org/3/library/re.html#flags.
 // Note, that the additional flag `FlagFallback` is specific to this Starlark implementation.
 const (
-	_ uint32 = 1 << iota // TEMPLATE; unused
-	FlagIgnoreCase
-	FlagLocale
-	FlagMultiline
-	FlagDotAll
-	FlagUnicode
-	FlagVerbose
-	FlagDebug
-	FlagASCII
-	FlagFallback
+	_              uint32 = 1 << iota // TEMPLATE; unused
+	FlagIgnoreCase                    // i
+	FlagLocale                        // L
+	FlagMultiline                     // m
+	FlagDotAll                        // s
+	FlagUnicode                       // u
+	FlagVerbose                       // x
+	FlagDebug                         // -
+	FlagASCII                         // a
+	FlagFallback                      // -
 
-	// Flags supported by the Go regex library.
-	supportedFlags = FlagIgnoreCase | FlagMultiline | FlagDotAll
+	typeFlags      = FlagASCII | FlagLocale | FlagUnicode        // exclude flags in subpatterns
+	globalFlags    = FlagDebug                                   // flags, that may only appear on global flags
+	supportedFlags = FlagIgnoreCase | FlagMultiline | FlagDotAll // flags supported by the Go regex library
 )
 
 const (

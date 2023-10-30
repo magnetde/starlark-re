@@ -3346,6 +3346,32 @@ def test_curly_braces():
     # extra test for coverage
     assertRaises(lambda: re.compile(r'.{%d,%d}' % (0,1<<128)))
 
+def test_flag_errors():
+    assertRaises(lambda: re.compile('.', re.LOCALE),
+                 "cannot use LOCALE flag with a str pattern")
+    assertRaises(lambda: re.compile('.', re.ASCII | re.UNICODE),
+                 "ASCII and UNICODE flags are incompatible")
+    assertRaises(lambda: re.compile(b'.', re.UNICODE),
+                 "cannot use UNICODE flag with a bytes pattern")
+    assertRaises(lambda: re.compile(b'.', re.ASCII | re.LOCALE),
+                 "ASCII and LOCALE flags are incompatible")
+
+    checkPatternError(r'(?L)', "bad inline flags: cannot use 'L' flag with a str pattern", 3)
+    checkPatternError(b'(?u)', "bad inline flags: cannot use 'u' flag with a bytes pattern", 3)
+    checkPatternError(r'(?au)', "bad inline flags: flags 'a', 'u' and 'L' are incompatible", 4)
+    checkPatternError(b'(?aL)', "bad inline flags: flags 'a', 'u' and 'L' are incompatible", 4)
+    checkPatternError(r'(?u', "missing -, : or )", 3)
+    checkPatternError(r'(?uf', "unknown flag", 3)
+    checkPatternError(r'(?u0', "missing -, : or )", 3)
+    checkPatternError(r'.(?-', "missing flag", 4)
+    checkPatternError(r'.(?-f)', "unknown flag", 4)
+    checkPatternError(r'.(?-0)', "missing flag", 4)
+    checkPatternError(r'.(?-u)', "bad inline flags: cannot turn off flags 'a', 'u' and 'L'", 5)
+    checkPatternError(r'.(?-i', "missing :", 5)
+    checkPatternError(r'.(?-if)', "unknown flag", 5)
+    checkPatternError(r'.(?-i0)', "missing :", 5)
+    checkPatternError(r'.(?i-i:)', "bad inline flags: flag turned on and off", 6)
+
 def test_fallback():
     assertTrue(re.match(r'a*', 'aaa', re.FALLBACK))
     assertTrue(re.match(r'a+', 'aaa', re.FALLBACK))
@@ -3595,6 +3621,7 @@ if WITH_FALLBACK:
     test_template_escape()
     test_max_rune()
     test_curly_braces()
+    test_flag_errors()
     test_fallback()
     test_ascii_and_unicode_flag_fallback()
 else:

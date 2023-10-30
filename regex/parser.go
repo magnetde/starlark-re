@@ -10,11 +10,6 @@ import (
 	"github.com/magnetde/starlark-re/util"
 )
 
-const (
-	typeFlags   = FlagASCII | FlagLocale | FlagUnicode // exclude flags in subpatterns
-	globalFlags = FlagDebug                            // flags, that may only appear on global flags
-)
-
 // state represents the current parser state.
 // It contains global flags, a mapping of group names to group indices, a list of open / closed groups,
 // a number of valid look-behind groups, and a mapping of groups to their positions in the pattern.
