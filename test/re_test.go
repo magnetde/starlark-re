@@ -21,7 +21,7 @@ var reScript string
 // TestRe is the main function for regex tests.
 // Tests must be defined within the `re_test.py` file and are interpreted here.
 func TestRe(t *testing.T) {
-	err := runTests(t, re.NewModule())
+	err := runTests(t, re.NewModule(), true, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func TestRe(t *testing.T) {
 		MaxCacheSize: -1,
 	}
 
-	err = runTests(t, re.NewModuleOptions(options))
+	err = runTests(t, re.NewModuleOptions(options), false, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,17 +41,19 @@ func TestRe(t *testing.T) {
 		DisableFallback: true,
 	}
 
-	err = runTests(t, re.NewModuleOptions(options))
-	if err == nil {
-		t.Fatal("expected error, got <nil>")
+	err = runTests(t, re.NewModuleOptions(options), true, false)
+	if err != nil {
+		t.Fatal(err)
 	}
 }
 
 // runTests executes "re_test.py".
-func runTests(t *testing.T, re *re.Module) error {
+func runTests(t *testing.T, re *re.Module, withCache, fallbackEnabled bool) error {
 	predeclared := starlark.StringDict{
-		"re":        re,
-		"MAXREPEAT": starlark.MakeInt(math.MaxInt32),
+		"re":            re,
+		"MAXREPEAT":     starlark.MakeInt(math.MaxInt32),
+		"WITH_CACHE":    starlark.Bool(withCache),
+		"WITH_FALLBACK": starlark.Bool(fallbackEnabled),
 	}
 
 	helpers := map[string]func(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error){

@@ -379,12 +379,12 @@ func (p *patternParam) Unpack(v starlark.Value) error {
 
 // Unpack unpacks a Starlark value, that must be either of type `str` or `bytes`.
 func (s *strOrBytes) Unpack(v starlark.Value) error {
-	switch t := v.(type) {
+	switch v := v.(type) {
 	case starlark.String:
-		s.value = string(t)
+		s.value = string(v)
 		s.isString = true
 	case starlark.Bytes:
-		s.value = string(t)
+		s.value = string(v)
 		s.isString = false
 	default:
 		return fmt.Errorf("got %s, want str or bytes", v.Type())
@@ -1332,14 +1332,14 @@ func (m *Match) group(v starlark.Value) (starlark.Value, error) {
 // of type str are used as group names. If the index key is out of range, does not exist or has
 // an invalid type, then an index error is returned.
 func (m *Match) getIndex(v starlark.Value) (int, error) {
-	switch t := v.(type) {
+	switch v := v.(type) {
 	case starlark.Int:
-		i, ok := t.Int64()
+		i, ok := v.Int64()
 		if ok && i >= 0 && i < int64(len(m.groups)) {
 			return int(i), nil
 		}
 	case starlark.String:
-		if i := m.pattern.re.SubexpIndex(string(t)); i >= 0 {
+		if i := m.pattern.re.SubexpIndex(string(v)); i >= 0 {
 			return i, nil
 		}
 	}

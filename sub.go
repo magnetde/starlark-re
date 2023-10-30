@@ -101,22 +101,22 @@ func (r *callableReplacer) replace(w *strings.Builder, m *Match) error {
 // If the parameter is of type `str` or `bytes`, a template replacer is created.
 // If the parameter is callable, a function replacer is returned instead.
 func buildReplacer(thread *starlark.Thread, p *Pattern, r starlark.Value) (matchReplacer, error) {
-	switch t := r.(type) {
+	switch r := r.(type) {
 	case starlark.String:
 		if !p.pattern.isString {
 			return nil, errors.New("got str, want bytes")
 		}
 
-		return newTemplateReplacer(p.re, string(t), true /* is string */)
+		return newTemplateReplacer(p.re, string(r), true /* is string */)
 	case starlark.Bytes:
 		if p.pattern.isString {
 			return nil, errors.New("got bytes, want str")
 		}
 
-		return newTemplateReplacer(p.re, string(t), false /* is not string */)
+		return newTemplateReplacer(p.re, string(r), false /* is not string */)
 	case starlark.Callable:
 		c := callableReplacer{
-			c:      t,
+			c:      r,
 			thread: thread,
 			p:      p,
 		}
