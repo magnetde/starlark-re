@@ -25,62 +25,56 @@ def assertionFail(msg, standardMsg):
     else:
         fail("%s : %s" % (standardMsg, msg))
 
-def safe_repr(obj, short=False):
-    result = repr(obj)
-    if not short or len(result) < 200:
-        return result
-    return result[:200] + ' [truncated]...'
-
 def assertEqual(x, y, msg=None):
-    if x != y: assertionFail(msg, "%s != %s" % (safe_repr(x), safe_repr(y)))
+    if x != y: assertionFail(msg, "%r != %r" % (x, y))
 
 def assertNotEqual(x, y, msg=None):
-    if x == y: assertionFail(msg, "%s == %s" % (safe_repr(x), safe_repr(y)))
+    if x == y: assertionFail(msg, "%r == %r" % (x, y))
 
 def assertIs(x, y, msg=None):
-    if not same(x, y): assertionFail(msg, "%s is not %s" % (safe_repr(x), safe_repr(y)))
+    if not same(x, y): assertionFail(msg, "%r is not %r" % (x, y))
 
 def assertIsNot(x, y, msg=None):
-    if same(x, y): assertionFail(msg, "unexpectedly identical: %s" % safe_repr(x))
+    if same(x, y): assertionFail(msg, "unexpectedly identical: %r" % x)
 
 def assertIsNone(v, msg=None):
-    if v != None: assertionFail(msg, "%s is not None" % safe_repr(v))
+    if v != None: assertionFail(msg, "%r is not None" % v)
 
 def assertIsNotNone(v, msg=None):
-    if v == None: assertionFail(msg, "unexpectedly None" % safe_repr(v))
+    if v == None: assertionFail(msg, "unexpectedly None" % v)
 
 def assertFalse(v, msg=None):
-    if v: assertionFail(msg, "%s is not false" % safe_repr(v))
+    if v: assertionFail(msg, "%r is not false" % v)
 
 def assertTrue(v, msg=None):
-    if not v: assertionFail(msg, "%s is not true" % safe_repr(v))
+    if not v: assertionFail(msg, "%r is not true" % v)
 
 def assertIn(x, y, msg=None):
-    if x not in y: assertionFail(msg, "%s not found in %s" % (safe_repr(x), safe_repr(y)))
+    if x not in y: assertionFail(msg, "%r not found in %r" % (x, y))
 
 def assertLess(x, y, msg=None):
-    if not x < y: assertionFail(msg, "%s not less than %s" % (safe_repr(x), safe_repr(y)))
+    if not x < y: assertionFail(msg, "%r not less than %r" % (x, y))
 
 def assertGreater(x, y, msg=None):
-    if not x > y: assertionFail(msg, "%s not greater than %s" % (safe_repr(x), safe_repr(y)))
+    if not x > y: assertionFail(msg, "%r not greater than %r" % (x, y))
 
 def assertIsInstance(v, t, msg=None):
-    if type(v) != t: assertionFail(msg, "%s is not an instance of %s" % (safe_repr(v), safe_repr(t)))
+    if type(v) != t: assertionFail(msg, "%r is not an instance of %r" % (v, t))
 
 def assertRegex(v, r, msg=None):
-    if not re.search(r, v): assertionFail(msg, "Regex didn't match: %s not found in %s" % (safe_repr(v), safe_repr(r)))
+    if not re.search(r, v): assertionFail(msg, "Regex didn't match: %r not found in %r" % (v, r))
 
 def assertRaises(v, e=None, msg=None):
     err = trycatch(v)[1]
     if err == None or (e != None and err != e):
         if e == None: e = "error"
-        assertionFail(msg, "%s not raised" % safe_repr(e))
+        assertionFail(msg, "%r not raised" % e)
 
 def assertRaisesRegex(v, e=None, msg=None):
     err = trycatch(v)[1]
     if err == None or not re.search(e, err):
         if e == None: e = "error"
-        assertionFail(msg, "%s not raised" % safe_repr(e))
+        assertionFail(msg, "%r not raised" % e)
 
 # replacement for str % (...)
 def format(s, *args):
@@ -704,7 +698,8 @@ def checkPatternError(pattern, errmsg, pos=None):
     assertTrue(err.startswith(errmsg), "%r does not starts with %r" % (err, errmsg))
 
     if pos != None:
-        assertTrue(("%s at position %d" % (errmsg, pos)) in err)
+        assertTrue(("%s at position %d" % (errmsg, pos)) in err,
+                   "error %r not at position %d" % (err, pos))
 
 def checkTemplateError(pattern, repl, string, errmsg, pos=None):
     _, err = trycatch(lambda: re.sub(pattern, repl, string))
@@ -713,7 +708,8 @@ def checkTemplateError(pattern, repl, string, errmsg, pos=None):
     assertTrue(err.startswith(errmsg), "%r does not starts with %r" % (err, errmsg))
 
     if pos != None:
-        assertTrue(("%s at position %d" % (errmsg, pos)) in err)
+        assertTrue(("%s at position %d" % (errmsg, pos)) in err,
+                   "error %r not at position %d" % (err, pos))
 
 def test_search_star_plus():
     assertEqual(re.search('x*', 'axx').span(0), (0, 0))
@@ -3332,6 +3328,24 @@ def test_max_rune():
     re.compile(r'\U0010FFFF')
     assertRaises(lambda: re.compile(r'\U00110000'))
 
+def test_curly_braces():
+    assertTrue(re.match(r'{', '{'))
+    assertTrue(re.match(r'{}', '{}'))
+    assertTrue(re.match(r'{abc', '{abc'))
+    assertTrue(re.match(r'{1', '{1'))
+    assertTrue(re.match(r'{0,1', '{0,1'))
+    assertTrue(re.match(r'{0,1,0}', '{0,1,0}'))
+
+    assertTrue(re.match(r'{', '{', re.FALLBACK))
+    assertTrue(re.match(r'{}', '{}', re.FALLBACK))
+    assertTrue(re.match(r'{abc', '{abc', re.FALLBACK))
+    assertTrue(re.match(r'{1', '{1', re.FALLBACK))
+    assertTrue(re.match(r'{0,1', '{0,1', re.FALLBACK))
+    assertTrue(re.match(r'{0,1,0}', '{0,1,0}', re.FALLBACK))
+
+    # extra test for coverage
+    assertRaises(lambda: re.compile(r'.{%d,%d}' % (0,1<<128)))
+
 def test_fallback():
     assertTrue(re.match(r'a*', 'aaa', re.FALLBACK))
     assertTrue(re.match(r'a+', 'aaa', re.FALLBACK))
@@ -3400,6 +3414,11 @@ def test_cache():
     assertLess(measure(lambda: re.compile(p)), 0.001)
     re.purge()
     assertGreater(measure(lambda: re.compile(p)), 0.1)
+
+    # no cache with DEBUG flag
+    re.purge()
+    assertGreater(measure(lambda: get_debug_out(p)), 0.25)
+    assertGreater(measure(lambda: get_debug_out(p)), 0.25)
 
 def test_max_cache_size():
     p = r'([a-z])' * 10000
@@ -3575,6 +3594,7 @@ if WITH_FALLBACK:
     test_repr_ascii()
     test_template_escape()
     test_max_rune()
+    test_curly_braces()
     test_fallback()
     test_ascii_and_unicode_flag_fallback()
 else:

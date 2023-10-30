@@ -90,13 +90,13 @@ These unsupported elements include:
 
 If the regular expression pattern does not include any unsupported elements, it is preprocessed and
 then compiled with the default regex engine.
-Additionally, the preprocessor will make necessary modifications to literals and character classes
+The preprocessor will make necessary modifications to literals and character classes
 in the pattern to support flags such as `re.UNICODE` or `re.IGNORECASE|re.ASCII`.
 
-In the case that the regex pattern includes unsupported elements, the regex engine [regexp2.Regexp](https://pkg.go.dev/github.com/dlclark/regexp2),
-which supports all of these elements except for possessive repeat, is used instead.
-However, it should be noted that the using ´regexp2´ may result in higher runtimes.
-This engine is only used as a fallback when dealing with regex patterns that contain unsupported elements.
+In case that the regex pattern includes unsupported elements, the regex engine [regexp2.Regexp](https://pkg.go.dev/github.com/dlclark/regexp2),
+that supports all of these elements except for possessive repeat, is used instead.
+However, it should be noted that the using ´regexp2´ may result in higher runtimes,
+so this engine is only used as a fallback when dealing with regex patterns that contain unsupported elements.
 Compiled patterns are stored in an LRU cache.
 
 The module was tested against all supported Python tests for the re module
@@ -108,7 +108,7 @@ Currently, there are some differences to the Python re module:
 
 - The `re.LOCALE` flag has no effect.
 - Positions are given as byte offsets instead of character offsets (which is the default for Go and Starlark).
-- The fallback engine does not support the longest match search, so some submatches starting at the same position may be not found.
+- The fallback engine does not support the longest match search, so some matches starting at the same position may be not found.
   This may result in differing outcomes compared to Python, especially at the `fullmatch` function.
-- The default regex engine does not match `\b` at Unicode characters, while the fallback engine does.
+- The default regex engine does not match `\b` at unicode word boundaries, while the fallback engine does.
 - There is no support for possessive repetion operators and `Pattern.scanner`.

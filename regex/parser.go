@@ -381,7 +381,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 				sp.append(newItemsNode(opIn, set))
 			}
 
-		case '*', '+', '?', '{':
+		case '?', '*', '+', '{':
 			// repeat previous item
 			here := s.tell()
 
@@ -445,8 +445,7 @@ func parseInternal(s *source, state *state, verbose bool, nested int, first bool
 				} else {
 					max = maxRepeat
 				}
-			default:
-				return nil, fmt.Errorf("unsupported quantifier '%c'", c)
+			default: // cannot happen
 			}
 
 			// figure out which item to repeat
