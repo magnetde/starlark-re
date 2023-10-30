@@ -266,25 +266,25 @@ func dumpNode(b *strings.Builder, n *regexNode, level int) {
 	}
 }
 
-// toString converts a subpattern into a regex pattern string that is compatible with the Python regex engine.
+// toString writes a subpattern as a regex pattern string that is compatible with the Python regex engine into a string builder.
 // The replace function is used to change subelements of the pattern and cannot be null.
 // If the replace function rewrites a subelement, it must return true and the subelement is then ignored by this function.
 // The parameter `w` of the replace function is used to build the pattern string.
 // The current regex node is represented by the parameter 't'. 'ctx' is the context of the node 't'.
-func (p *subPattern) toString(isStr bool, replace func(w *subPatternWriter, n *regexNode, ctx *subPatternContext) bool) string {
-	w := subPatternWriter{
+func (p *subPattern) write(w *strings.Builder, isStr bool, replace func(w *subPatternWriter, n *regexNode, ctx *subPatternContext) bool) {
+	pw := subPatternWriter{
+		w:       w,
 		isStr:   isStr,
 		replace: replace,
 	}
 
-	w.writePattern(p, nil)
-	return w.String()
+	pw.writePattern(p, nil)
 }
 
 // subPatternWriter is a type to write the regex pattern.
 // It uses a `strings.Builder` and provides functions to write subpatterns, regex nodes, integers, and literals.
 type subPatternWriter struct {
-	strings.Builder
+	w       *strings.Builder
 	isStr   bool
 	replace func(w *subPatternWriter, n *regexNode, ctx *subPatternContext) bool
 }
@@ -329,39 +329,39 @@ func (w *subPatternWriter) writeNode(n *regexNode, ctx *subPatternContext) {
 
 	switch n.opcode {
 	case opAny:
-		w.WriteByte('.')
+		w.writeByte('.')
 	case opAssert, opAssertNot:
 		p := n.params.(assertParams)
 
-		w.WriteString("(?")
+		w.writeString("(?")
 
 		if p.dir < 0 {
-			w.WriteByte('<')
+			w.writeByte('<')
 		}
 		if n.opcode == opAssert {
-			w.WriteByte('=')
+			w.writeByte('=')
 		} else {
-			w.WriteByte('!')
+			w.writeByte('!')
 		}
 
 		w.writePattern(p.p, ctx.group)
-		w.WriteByte(')')
+		w.writeByte(')')
 	case opAt:
 		at := n.params.(atcode)
 
 		switch at {
 		case atBeginning:
-			w.WriteByte('^')
+			w.writeByte('^')
 		case atBeginningString:
-			w.WriteString(`\A`)
+			w.writeString(`\A`)
 		case atBoundary:
-			w.WriteString(`\b`)
+			w.writeString(`\b`)
 		case atNonBoundary:
-			w.WriteString(`\B`)
+			w.writeString(`\B`)
 		case atEnd:
-			w.WriteByte('$')
+			w.writeByte('$')
 		case atEndString:
-			w.WriteString(`\Z`)
+			w.writeString(`\Z`)
 		}
 	case opBranch:
 		items := n.params.([]*subPattern)
@@ -369,16 +369,16 @@ func (w *subPatternWriter) writeNode(n *regexNode, ctx *subPatternContext) {
 		// Always wrap branches branches inside of an non-capture group, if the current
 		// subpattern contains other node, than this branch node.
 		if ctx.hasSiblings {
-			w.WriteString("(?:")
+			w.writeString("(?:")
 		}
 		for i, item := range items {
 			if i > 0 {
-				w.WriteByte('|')
+				w.writeByte('|')
 			}
 			w.writePattern(item, ctx.group)
 		}
 		if ctx.hasSiblings {
-			w.WriteByte(')')
+			w.writeByte(')')
 		}
 	case opCategory:
 		// Always inside of character sets.
@@ -386,35 +386,35 @@ func (w *subPatternWriter) writeNode(n *regexNode, ctx *subPatternContext) {
 
 		switch category {
 		case categoryDigit:
-			w.WriteString(`\d`)
+			w.writeString(`\d`)
 		case categoryNotDigit:
-			w.WriteString(`\D`)
+			w.writeString(`\D`)
 		case categorySpace:
-			w.WriteString(`\s`)
+			w.writeString(`\s`)
 		case categoryNotSpace:
-			w.WriteString(`\S`)
+			w.writeString(`\S`)
 		case categoryWord:
-			w.WriteString(`\w`)
+			w.writeString(`\w`)
 		case categoryNotWord:
-			w.WriteString(`\W`)
+			w.writeString(`\W`)
 		}
 	case opGroupref:
 		group := n.params.(int)
 
-		w.WriteString(`\`)
+		w.writeString(`\`)
 		w.writeInt(group)
 	case opGrouprefExists:
 		p := n.params.(grouprefExParam)
 
-		w.WriteString("(?(")
+		w.writeString("(?(")
 		w.writeInt(p.condgroup)
-		w.WriteByte(')')
+		w.writeByte(')')
 		w.writePattern(p.itemYes, ctx.group)
 		if p.itemNo != nil {
-			w.WriteByte('|')
+			w.writeByte('|')
 			w.writePattern(p.itemNo, ctx.group)
 		}
-		w.WriteByte(')')
+		w.writeByte(')')
 	case opIn:
 		// Members in items are either of type LITERAL, RANGE or CATEGORY.
 		// IN nodes are always written as sets, because it is unknown, how the replacer function
@@ -428,11 +428,11 @@ func (w *subPatternWriter) writeNode(n *regexNode, ctx *subPatternContext) {
 			group:       ctx.group,
 		}
 
-		w.WriteByte('[')
+		w.writeByte('[')
 		for _, v := range items {
 			w.writeNode(v, &newCtx)
 		}
-		w.WriteByte(']')
+		w.writeByte(']')
 	case opLiteral:
 		w.writeLiteral(n.c)
 	case opMinRepeat, opMaxRepeat, opPossessiveRepeat:
@@ -451,56 +451,56 @@ func (w *subPatternWriter) writeNode(n *regexNode, ctx *subPatternContext) {
 		if !needsGroup {
 			w.writePattern(p.item, ctx.group)
 		} else {
-			w.WriteString("(?:")
+			w.writeString("(?:")
 			w.writePattern(p.item, ctx.group)
-			w.WriteByte(')')
+			w.writeByte(')')
 		}
 
 		if p.min == 0 && p.max == 1 {
-			w.WriteByte('?')
+			w.writeByte('?')
 		} else if p.min == 0 && p.max == maxRepeat {
-			w.WriteByte('*')
+			w.writeByte('*')
 		} else if p.min == 1 && p.max == maxRepeat {
-			w.WriteByte('+')
+			w.writeByte('+')
 		} else {
-			w.WriteByte('{')
+			w.writeByte('{')
 			w.writeInt(p.min)
-			w.WriteByte(',')
+			w.writeByte(',')
 			if p.max != maxRepeat {
 				w.writeInt(p.max)
 			}
-			w.WriteByte('}')
+			w.writeByte('}')
 		}
 
 		switch n.opcode {
 		case opMinRepeat:
-			w.WriteByte('?')
+			w.writeByte('?')
 		case opPossessiveRepeat:
-			w.WriteByte('+')
+			w.writeByte('+')
 		}
 	case opNegate:
-		w.WriteByte('^')
+		w.writeByte('^')
 	case opNotLiteral:
-		w.WriteString("[^")
+		w.writeString("[^")
 		w.writeLiteral(n.c)
-		w.WriteByte(']')
+		w.writeByte(']')
 	case opRange:
 		p := n.params.(rangeParams)
 
 		w.writeLiteral(p.lo)
-		w.WriteByte('-')
+		w.writeByte('-')
 		w.writeLiteral(p.hi)
 	case opSubpattern:
 		p := n.params.(subPatternParam)
 
-		w.WriteByte('(')
+		w.writeByte('(')
 
 		if p.group >= 0 {
 			groupName := groupName(p.p, p.group)
 			if groupName != "" {
-				w.WriteString("?P<")
-				w.WriteString(groupName)
-				w.WriteByte('>')
+				w.writeString("?P<")
+				w.writeString(groupName)
+				w.writeByte('>')
 			}
 		} else {
 			addFlags := p.addFlags & supportedFlags
@@ -509,17 +509,17 @@ func (w *subPatternWriter) writeNode(n *regexNode, ctx *subPatternContext) {
 			if addFlags != 0 || delFlags != 0 {
 				// Flags can only appear, when no group name exists
 
-				w.WriteByte('?')
+				w.writeByte('?')
 				if addFlags != 0 {
 					w.writeFlags(addFlags)
 				}
 				if delFlags != 0 {
-					w.WriteByte('-')
+					w.writeByte('-')
 					w.writeFlags(delFlags)
 				}
 
 				if p.p.len() > 0 {
-					w.WriteByte(':')
+					w.writeByte(':')
 				}
 			}
 		}
@@ -528,15 +528,15 @@ func (w *subPatternWriter) writeNode(n *regexNode, ctx *subPatternContext) {
 			w.writePattern(p.p, &p)
 		}
 
-		w.WriteByte(')')
+		w.writeByte(')')
 	case opAtomicGroup:
 		p := n.params.(*subPattern)
 
-		w.WriteString("(?>")
+		w.writeString("(?>")
 		w.writePattern(p, ctx.group)
-		w.WriteByte(')')
+		w.writeByte(')')
 	case opFailure:
-		w.WriteString("(?!)")
+		w.writeString("(?!)")
 	}
 }
 
@@ -551,9 +551,19 @@ func groupName(p *subPattern, gid int) string {
 	return ""
 }
 
+// writeByte writes the byte to the subpattern writer.
+func (w *subPatternWriter) writeByte(b byte) {
+	w.w.WriteByte(b)
+}
+
+// writeString writes the string to the subpattern writer.
+func (w *subPatternWriter) writeString(s string) {
+	w.w.WriteString(s)
+}
+
 // writeInt writes the integer to the subpattern writer.
 func (w *subPatternWriter) writeInt(i int) {
-	w.WriteString(strconv.Itoa(i))
+	w.writeString(strconv.Itoa(i))
 }
 
 // writeLiteral writes the literal to the subpattern writer.
@@ -563,23 +573,23 @@ func (w *subPatternWriter) writeInt(i int) {
 func (w *subPatternWriter) writeLiteral(r rune) {
 	l := utf8.RuneLen(r)
 
-	w.WriteString(`\x`)
+	w.writeString(`\x`)
 
 	s := strconv.FormatInt(int64(r), 16)
 	if l == 1 || (!w.isStr && r <= 0xff) {
 		if r <= 0xf {
-			w.WriteByte('0')
+			w.writeByte('0')
 		}
-		w.WriteString(s)
+		w.writeString(s)
 	} else {
 		l = 2 * min(l, 2) // 2 chars per byte
 
-		w.WriteByte('{')
+		w.writeByte('{')
 		if len(s) < l {
-			w.WriteString(strings.Repeat("0", l-len(s)))
+			w.writeString(strings.Repeat("0", l-len(s)))
 		}
-		w.WriteString(s)
-		w.WriteByte('}')
+		w.writeString(s)
+		w.writeByte('}')
 	}
 }
 
@@ -587,24 +597,24 @@ func (w *subPatternWriter) writeLiteral(r rune) {
 // They are ordered as follows: "aiLmsux".
 func (w *subPatternWriter) writeFlags(flags uint32) {
 	if flags&FlagASCII != 0 {
-		w.WriteByte('a')
+		w.writeByte('a')
 	}
 	if flags&FlagIgnoreCase != 0 {
-		w.WriteByte('i')
+		w.writeByte('i')
 	}
 	if flags&FlagLocale != 0 {
-		w.WriteByte('L')
+		w.writeByte('L')
 	}
 	if flags&FlagMultiline != 0 {
-		w.WriteByte('m')
+		w.writeByte('m')
 	}
 	if flags&FlagDotAll != 0 {
-		w.WriteByte('s')
+		w.writeByte('s')
 	}
 	if flags&FlagUnicode != 0 {
-		w.WriteByte('u')
+		w.writeByte('u')
 	}
 	if flags&FlagVerbose != 0 {
-		w.WriteByte('x')
+		w.writeByte('x')
 	}
 }

@@ -3332,34 +3332,90 @@ def test_max_rune():
     re.compile(r'\U0010FFFF')
     assertRaises(lambda: re.compile(r'\U00110000'))
 
-def test_purge_cache():
-    p = r'\w' * 100 # gets much longer because of the preprocessor
+def test_fallback():
+    assertTrue(re.match(r'a*', 'aaa', re.FALLBACK))
+    assertTrue(re.match(r'a+', 'aaa', re.FALLBACK))
+    assertTrue(re.match(r'a{2,}', 'aaa', re.FALLBACK))
+    assertTrue(re.match(b'a{2,}', b'aaa', re.FALLBACK))
+    assertTrue(re.match(r'[\w]', '\u00F6', re.FALLBACK))
+    assertTrue(re.match(r'xx', 'Xxx', re.IGNORECASE|re.FALLBACK))
+    assertTrue(re.match(r'xx', 'Xxx', re.IGNORECASE|re.ASCII|re.FALLBACK))
+    assertTrue(re.match(r'\u00d6', '\u00F6', re.IGNORECASE|re.FALLBACK))
+    assertIsNone(re.match(r'\u00d6', '\u00F6', re.IGNORECASE|re.ASCII|re.FALLBACK))
+    assertIsNone(re.match(b'[\\w]', b'\u00F6', re.FALLBACK))
+    assertIsNone(re.match(b'\\xd6', b'\u00F6', re.IGNORECASE|re.FALLBACK))
+
+    FALLBACK = 0x200
+    p = re.compile('x', re.IGNORECASE|FALLBACK)
+    assertEqual(repr(p), r"re.compile('x', re.IGNORECASE|re.FALLBACK)")
+
+def test_ascii_and_unicode_flag_fallback():
+    # String patterns
+    for flags in (0, re.UNICODE):
+        pat = re.compile('\u00C0', flags | re.IGNORECASE | re.FALLBACK)
+        assertTrue(pat.match('\u00E0'))
+        pat = re.compile(r'\w', flags)
+        assertTrue(pat.match('\u00E0'))
+    pat = re.compile('\u00C0', re.ASCII | re.IGNORECASE | re.FALLBACK)
+    assertIsNone(pat.match('\u00E0'))
+    pat = re.compile('(?a)\u00C0', re.IGNORECASE | re.FALLBACK)
+    assertIsNone(pat.match('\u00E0'))
+    pat = re.compile(r'\w', re.ASCII)
+    assertIsNone(pat.match('\u00E0'))
+    pat = re.compile(r'(?a)\w')
+    assertIsNone(pat.match('\u00E0'))
+    # Bytes patterns
+    for flags in (0, re.ASCII):
+        pat = re.compile(b'\xc0', flags | re.IGNORECASE | re.FALLBACK)
+        assertIsNone(pat.match(b'\xe0'))
+        pat = re.compile(b'\\w', flags)
+        assertIsNone(pat.match(b'\xe0'))
+
+def test_no_fallback():
+    assertRaises(lambda: re.FALLBACK)
+    assertRaises(lambda: re.compile(r'(x)(?!y)'))
+    assertRaises(lambda: re.compile(r'(x)\1'))
+    assertRaises(lambda: re.compile(r'(x){1024}'))
+
+    FALLBACK = 0x200
+    p = re.compile('x', re.IGNORECASE|FALLBACK)
+    assertEqual(repr(p), r"re.compile('x', re.IGNORECASE|0x200)")
+
+def test_cache():
+    p = r'([a-z])' * 10000
 
     re.purge()
     assertGreater(measure(lambda: re.compile(p)), 0.1)
-    assertLess(measure(lambda: re.compile(p)), 0.0001)
+    assertLess(measure(lambda: re.compile(p)), 0.001)
 
-    # add many patterns to overfill the max cache size
+    pat = re.compile(p)
+    assertLess(measure(lambda: re.compile(pat)), 0.001)
+
+    assertGreater(measure(lambda: re.compile(p, re.IGNORECASE)), 0.1)
+    assertLess(measure(lambda: re.compile(p, re.IGNORECASE)), 0.001)
+
+    assertGreater(measure(lambda: re.compile(bytes(p))), 0.1)
+    assertLess(measure(lambda: re.compile(bytes(p))), 0.001)
+
+    assertLess(measure(lambda: re.compile(p)), 0.001)
+    re.purge()
+    assertGreater(measure(lambda: re.compile(p)), 0.1)
+
+def test_max_cache_size():
+    p = r'([a-z])' * 10000
+
+    re.purge()
+    assertGreater(measure(lambda: re.compile(p)), 0.1)
+    assertLess(measure(lambda: re.compile(p)), 0.001)
+
+    # add many patterns to overfill the cache
     for i in range(250):
         re.compile(str(i))
 
     assertGreater(measure(lambda: re.compile(p)), 0.1)
 
-def test_max_cache_size():
-    p = r'\w' * 100
-
-    re.purge()
-    assertGreater(measure(lambda: re.compile(p)), 0.1)
-
-    assertLess(measure(lambda: re.compile(p)), 0.0001)
-    pat = re.compile(p)
-    assertLess(measure(lambda: re.compile(pat)), 0.0001)
-
-    re.purge()
-    assertGreater(measure(lambda: re.compile(p)), 0.1)
-
 def test_no_cache():
-    p = r'\w' * 100
+    p = r'([a-z])' * 10000
 
     assertGreater(measure(lambda: re.compile(p)), 0.1)
     re.purge() # should have no effect
@@ -3519,11 +3575,13 @@ if WITH_FALLBACK:
     test_repr_ascii()
     test_template_escape()
     test_max_rune()
+    test_fallback()
+    test_ascii_and_unicode_flag_fallback()
 else:
-    pass
+    test_no_fallback()
 
 if WITH_CACHE:
-    test_purge_cache()
+    test_cache()
     test_max_cache_size()
 else:
     test_no_cache()

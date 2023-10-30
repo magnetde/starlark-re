@@ -83,6 +83,19 @@ func isGoIdentifer(name string) bool {
 func (p *preprocessor) stdPattern() string {
 	var b strings.Builder
 
+	p.writeFlags(&b, false)
+
+	// Create the pattern string with the default replacer.
+	p.p.write(&b, p.isStr, func(w *subPatternWriter, n *regexNode, ctx *subPatternContext) bool {
+		return p.defaultReplacer(w, n, ctx, true)
+	})
+
+	return b.String()
+}
+
+// writeFlags writes a group of global regex flags into a string builder.
+// If `allowUnicode` is true, than the unicode flag is also added, if enabled.
+func (p *preprocessor) writeFlags(w *strings.Builder, allowUnicode bool) {
 	flags := p.flags()
 	if flags&FlagIgnoreCase != 0 {
 		if flags&FlagASCII != 0 || !p.isStr {
@@ -92,28 +105,29 @@ func (p *preprocessor) stdPattern() string {
 		}
 	}
 
-	if flags&supportedFlags != 0 {
-		b.WriteString("(?")
-
-		if flags&FlagIgnoreCase != 0 {
-			b.WriteByte('i')
-		}
-		if flags&FlagMultiline != 0 {
-			b.WriteByte('m')
-		}
-		if flags&FlagDotAll != 0 {
-			b.WriteByte('s')
-		}
-
-		b.WriteByte(')')
+	supported := supportedFlags
+	if allowUnicode {
+		supported |= FlagUnicode
 	}
 
-	// Create the pattern string with the default replacer.
-	b.WriteString(p.p.toString(p.isStr, func(w *subPatternWriter, n *regexNode, ctx *subPatternContext) bool {
-		return p.defaultReplacer(w, n, ctx, true)
-	}))
+	if flags&supported != 0 {
+		w.WriteString("(?")
 
-	return b.String()
+		if flags&FlagIgnoreCase != 0 {
+			w.WriteByte('i')
+		}
+		if flags&FlagMultiline != 0 {
+			w.WriteByte('m')
+		}
+		if flags&FlagDotAll != 0 {
+			w.WriteByte('s')
+		}
+		if allowUnicode && flags&FlagUnicode != 0 {
+			w.WriteByte('u')
+		}
+
+		w.WriteByte(')')
+	}
 }
 
 // unicodeRanges contains the equivalent unicode character sets of the character classes \d, \D, \s, and so on.
@@ -208,7 +222,7 @@ func (p *preprocessor) defaultReplacer(w *subPatternWriter, n *regexNode, ctx *s
 			default:
 				if r, ok := unicodeRanges[category]; ok {
 					r = strings.TrimSuffix(strings.TrimPrefix(r, "["), "]") // remove the character set chars
-					w.WriteString(r)                                        // write the character set
+					w.writeString(r)                                        // write the character set
 					return true
 				}
 			}
@@ -226,7 +240,7 @@ func (p *preprocessor) defaultReplacer(w *subPatternWriter, n *regexNode, ctx *s
 
 			w.writeLiteral(lo)
 			if lo != hi {
-				w.WriteByte('-')
+				w.writeByte('-')
 				w.writeLiteral(hi)
 			}
 		}
@@ -258,7 +272,7 @@ func (p *preprocessor) defaultReplacer(w *subPatternWriter, n *regexNode, ctx *s
 // buildRange creates a range, that includes all unicode characters matching the regex category.
 func buildUnicodeRange(c catcode) ([]rune, error) {
 	r, ok := unicodeRanges[c]
-	if ok {
+	if !ok {
 		return nil, fmt.Errorf("unknown category %d", c)
 	}
 
@@ -284,10 +298,10 @@ func writeLiteralCases(w *subPatternWriter, c rune, inSet bool) bool {
 	}
 
 	if !inSet {
-		w.WriteByte('[')
+		w.writeByte('[')
 		w.writeLiteral(c)
 		w.writeLiteral(o)
-		w.WriteByte(']')
+		w.writeByte(']')
 	} else {
 		w.writeLiteral(c)
 		w.writeLiteral(o)
@@ -423,7 +437,7 @@ func writeSubranges(w *subPatternWriter, lo, hi rune) bool {
 // the character `lo` and h represents character hi.
 func writeRange(w *subPatternWriter, lo, hi rune) {
 	w.writeLiteral(lo)
-	w.WriteByte('-')
+	w.writeByte('-')
 	w.writeLiteral(hi)
 }
 
@@ -476,7 +490,11 @@ func subrangeIndex(c rune) int {
 // between Python and `regexp.Regexp2`. So, all capture group names must be omitted from the regex
 // pattern.
 func (p *preprocessor) fallbackPattern() string {
-	return p.p.toString(p.isStr, func(w *subPatternWriter, n *regexNode, ctx *subPatternContext) bool {
+	var b strings.Builder
+
+	p.writeFlags(&b, true)
+
+	p.p.write(&b, p.isStr, func(w *subPatternWriter, n *regexNode, ctx *subPatternContext) bool {
 		if p.defaultReplacer(w, n, ctx, false) {
 			return true
 		}
@@ -491,15 +509,17 @@ func (p *preprocessor) fallbackPattern() string {
 				return false
 			}
 
-			w.WriteByte('(')
+			w.writeByte('(')
 			if p.p.len() > 0 {
 				w.writePattern(p.p, &p)
 			}
-			w.WriteByte(')')
+			w.writeByte(')')
 
 			return true
 		}
 
 		return false
 	})
+
+	return b.String()
 }

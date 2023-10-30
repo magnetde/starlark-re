@@ -102,22 +102,7 @@ func Compile(pattern string, isStr bool, flags uint32, fallbackEnabled bool) (En
 	} else {
 		s := p.fallbackPattern()
 
-		options := regexp2.None | regexp2.RE2
-
-		if flags&FlagIgnoreCase != 0 {
-			options |= regexp2.IgnoreCase
-		}
-		if flags&FlagMultiline != 0 {
-			options |= regexp2.Multiline
-		}
-		if flags&FlagDotAll != 0 {
-			options |= regexp2.Singleline
-		}
-		if flags&FlagUnicode != 0 {
-			options |= regexp2.Unicode
-		}
-
-		r2, err := regexp2.Compile(s, options)
+		r2, err := regexp2.Compile(s, regexp2.RE2)
 		if err != nil {
 			return nil, "", err
 		}
