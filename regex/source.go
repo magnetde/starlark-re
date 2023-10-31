@@ -87,6 +87,18 @@ func (s *source) peek() (rune, bool) {
 	return c, true
 }
 
+// match returns, whether the next character matches the given character.
+// If it does, the reading position is then moved to the next character.
+func (s *source) match(c rune) bool {
+	ch, size, ok := s.next()
+	if !ok || ch != c {
+		return false
+	}
+
+	s.cur = s.cur[size:]
+	return true
+}
+
 // skipUntil skips all characters until the given character is found.
 // The reading position is then moved to the character that follows the specified character and the skipped characters are returned.
 // If the character is not found in the string, the reading position is moved to the end of the string.
@@ -110,18 +122,6 @@ func (s *source) getUntil(c rune, name string) (string, error) {
 
 	s.cur = rest
 	return pre, nil
-}
-
-// match returns, whether the next character matches the given character.
-// If it does, the reading position is then moved to the next character.
-func (s *source) match(c rune) bool {
-	ch, size, ok := s.next()
-	if !ok || ch != c {
-		return false
-	}
-
-	s.cur = s.cur[size:]
-	return true
 }
 
 // nextInt returns the decimal integer at the current reading position.

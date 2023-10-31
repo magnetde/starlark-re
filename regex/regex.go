@@ -33,8 +33,8 @@ type Engine interface {
 	// SubexpCount returns the number of parenthesized subexpressions in the regex pattern.
 	SubexpCount() int
 
-	// SubexpIndex returns the index of the first (leftmost) subexpression with the given
-	// name, or -1 if there is no subexpression with that name.
+	// SubexpIndex returns the index of the subexpression with the given name, or -1 if
+	// there is no subexpression with that name.
 	SubexpIndex(name string) int
 
 	// SupportsLongest returns, if the regex engine supports the longest match search.

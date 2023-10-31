@@ -244,6 +244,8 @@ func (p *preprocessor) defaultReplacer(w *subPatternWriter, n *regexNode, ctx *s
 				w.writeLiteral(hi)
 			}
 		}
+
+		return true
 	case opLiteral:
 		if !asciiCase {
 			return false

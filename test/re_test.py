@@ -3372,6 +3372,11 @@ def test_flag_errors():
     checkPatternError(r'.(?-i0)', "missing :", 5)
     checkPatternError(r'.(?i-i:)', "bad inline flags: flag turned on and off", 6)
 
+def test_invalid_group():
+    assertRaises(lambda: re.compile('(?P<group>x)(?P<group>y)'))
+    assertRaises(lambda: re.match('.', 'x').group('unknown'))
+    assertRaises(lambda: re.match('.', 'x', re.FALLBACK).group('unknown'))
+
 def test_fallback():
     assertTrue(re.match(r'a*', 'aaa', re.FALLBACK))
     assertTrue(re.match(r'a+', 'aaa', re.FALLBACK))
@@ -3388,6 +3393,33 @@ def test_fallback():
     FALLBACK = 0x200
     p = re.compile('x', re.IGNORECASE|FALLBACK)
     assertEqual(repr(p), r"re.compile('x', re.IGNORECASE|re.FALLBACK)")
+
+def test_fallback_groups():
+    # check if the order of groups is correct
+
+    def groupindex(p):
+        index = {i: n for n, i in p.groupindex.items()}
+        return [index[i] if i in index else i for i in range(1, p.groups + 1)]
+
+    p = re.compile('(.)(?P<x>.)(.)', re.FALLBACK)
+    g = groupindex(p)
+    assertEqual(g, [1, 'x', 3])
+    assertEqual(p.match('xyz').group(*g), ('x', 'y', 'z'))
+
+    p = re.compile('(.)(?P<x>(.))(.)', re.FALLBACK)
+    g = groupindex(p)
+    assertEqual(g, [1, 'x', 3, 4])
+    assertEqual(p.match('xyz').group(*g), ('x', 'y', 'y', 'z'))
+
+    p = re.compile('(.)(?P<x>.)(?P<a>.)', re.FALLBACK)
+    g = groupindex(p)
+    assertEqual(g, [1, 'x', 'a'])
+    assertEqual(p.match('xyz').group(*g), ('x', 'y', 'z'))
+
+    p = re.compile('(.)(?P<x>(?P<b>.))(?P<a>.)', re.FALLBACK)
+    g = groupindex(p)
+    assertEqual(g, [1, 'x', 'b', 'a'])
+    assertEqual(p.match('xyz').group(*g), ('x', 'y', 'y', 'z'))
 
 def test_ascii_and_unicode_flag_fallback():
     # String patterns
@@ -3622,7 +3654,9 @@ if WITH_FALLBACK:
     test_max_rune()
     test_curly_braces()
     test_flag_errors()
+    test_invalid_group()
     test_fallback()
+    test_fallback_groups()
     test_ascii_and_unicode_flag_fallback()
 else:
     test_no_fallback()
