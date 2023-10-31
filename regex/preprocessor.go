@@ -137,8 +137,8 @@ func (p *preprocessor) writeFlags(w *strings.Builder, allowUnicode bool) {
 var unicodeRanges = map[catcode]string{
 	categoryDigit:    `[\p{Nd}]`,
 	categoryNotDigit: `[^\p{Nd}]`,
-	categorySpace:    `[\p{Z}\v]`,
-	categoryNotSpace: `[^\p{Z}\v]`,
+	categorySpace:    `[ \t\n\r\f\v\p{Z}]`,
+	categoryNotSpace: `[^ \t\n\r\f\v\p{Z}]`,
 	categoryWord:     `[\p{L}\p{N}_]`,
 	categoryNotWord:  `[^\p{L}\p{N}_]`,
 }

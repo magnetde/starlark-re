@@ -3443,6 +3443,46 @@ def test_ascii_and_unicode_flag_fallback():
         pat = re.compile(b'\\w', flags)
         assertIsNone(pat.match(b'\xe0'))
 
+def test_unicode_categories():
+    for flag in (0, re.FALLBACK):
+        assertTrue(re.match(r'[\w]', 'x', flag))
+        assertTrue(re.match(r'[\w]', '\u00E4', flag))
+        assertIsNone(re.match(r'[\w]', '!', flag))
+        assertTrue(re.match(r'[\w!]', 'x', flag))
+        assertTrue(re.match(r'[\w!]', '!', flag))
+        assertIsNone(re.match(r'[\w!]', '?', flag))
+        assertTrue(re.match(r'[\w!]', '\u00E4', flag))
+
+        assertTrue(re.match(r'[\w]', 'x', flag | re.ASCII))
+        assertIsNone(re.match(r'[\w]', '!', flag | re.ASCII))
+        assertIsNone(re.match(r'[\w]', '\u00E4', flag | re.ASCII))
+        assertTrue(re.match(r'[\w!]', 'x', flag | re.ASCII))
+        assertIsNone(re.match(r'[\w!]', '\u00E4', flag | re.ASCII))
+
+        assertIsNone(re.match(r'[\W]', 'x', flag))
+        assertIsNone(re.match(r'[\W]', '\u00E4', flag))
+        assertTrue(re.match(r'[\W]', '!', flag))
+        assertIsNone(re.match(r'[\W!]', 'x', flag))
+        assertTrue(re.match(r'[\W!]', '!', flag))
+        assertTrue(re.match(r'[\W!]', '?', flag))
+        assertIsNone(re.match(r'[\W!]', '\u00E4', flag))
+
+        assertIsNone(re.match(r'[\W]', 'x', flag | re.ASCII))
+        assertTrue(re.match(r'[\W]', '!', flag | re.ASCII))
+        assertTrue(re.match(r'[\W]', '\u00E4', flag | re.ASCII))
+        assertIsNone(re.match(r'[\W!]', 'x', flag | re.ASCII))
+        assertTrue(re.match(r'[\W!]', '\u00E4', flag | re.ASCII))
+
+        assertTrue(re.match(r'[\d]', '0', flag))
+        assertIsNone(re.match(r'[\d]', 'x', flag))
+        assertTrue(re.match(r'[\D]', 'x', flag))
+        assertIsNone(re.match(r'[\D]', '0', flag))
+
+        assertTrue(re.match(r'[\s]', ' ', flag))
+        assertIsNone(re.match(r'[\s]', 'x', flag))
+        assertTrue(re.match(r'[\S]', 'x', flag))
+        assertIsNone(re.match(r'[\S]', ' ', flag))
+
 def test_no_fallback():
     assertRaises(lambda: re.FALLBACK)
     assertRaises(lambda: re.compile(r'(x)(?!y)'))
@@ -3658,6 +3698,7 @@ if WITH_FALLBACK:
     test_fallback()
     test_fallback_groups()
     test_ascii_and_unicode_flag_fallback()
+    test_unicode_categories()
 else:
     test_no_fallback()
 
