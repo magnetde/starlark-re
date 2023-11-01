@@ -3443,6 +3443,131 @@ def test_ascii_and_unicode_flag_fallback():
         pat = re.compile(b'\\w', flags)
         assertIsNone(pat.match(b'\xe0'))
 
+def test_ignore_case_fallback():
+    assertEqual(re.match("abc", "ABC", re.I | re.FALLBACK).group(0), "ABC")
+    assertEqual(re.match(b"abc", b"ABC", re.I | re.FALLBACK).group(0), b"ABC")
+    assertEqual(re.match(r"(a\s[^a])", "a b", re.I | re.FALLBACK).group(1), "a b")
+    assertEqual(re.match(r"(a\s[^a]*)", "a bb", re.I | re.FALLBACK).group(1), "a bb")
+    assertEqual(re.match(r"(a\s[abc])", "a b", re.I | re.FALLBACK).group(1), "a b")
+    assertEqual(re.match(r"(a\s[abc]*)", "a bb", re.I | re.FALLBACK).group(1), "a bb")
+    assertEqual(re.match(r"((a)\s\2)", "a a", re.I | re.FALLBACK).group(1), "a a")
+    assertEqual(re.match(r"((a)\s\2*)", "a aa", re.I | re.FALLBACK).group(1), "a aa")
+    assertEqual(re.match(r"((a)\s(abc|a))", "a a", re.I | re.FALLBACK).group(1), "a a")
+    assertEqual(re.match(r"((a)\s(abc|a)*)", "a aa", re.I | re.FALLBACK).group(1), "a aa")
+
+    # Two different characters have the same lowercase.
+    # assert 'K'.lower() == '\u212a'.lower() == 'k' # 'K'
+    assertTrue(re.match(r'K', '\u212a', re.I | re.FALLBACK))
+    assertTrue(re.match(r'k', '\u212a', re.I | re.FALLBACK))
+    assertTrue(re.match(r'\u212a', 'K', re.I | re.FALLBACK))
+    assertTrue(re.match(r'\u212a', 'k', re.I | re.FALLBACK))
+
+    # Two different characters have the same uppercase.
+    # assert 's'.upper() == '\u017f'.upper() == 'S' # 'ſ'
+    assertTrue(re.match(r'S', '\u017f', re.I | re.FALLBACK))
+    assertTrue(re.match(r's', '\u017f', re.I | re.FALLBACK))
+    assertTrue(re.match(r'\u017f', 'S', re.I | re.FALLBACK))
+    assertTrue(re.match(r'\u017f', 's', re.I | re.FALLBACK))
+
+    # Two different characters have the same uppercase. Unicode 9.0+.
+    # assert '\u0432'.upper() == '\u1c80'.upper() == '\u0412' # 'в', 'ᲀ', 'В'
+    assertTrue(re.match(r'\u0412', '\u0432', re.I | re.FALLBACK))
+    assertTrue(re.match(r'\u0412', '\u1c80', re.I | re.FALLBACK))
+    assertTrue(re.match(r'\u0432', '\u0412', re.I | re.FALLBACK))
+    assertTrue(re.match(r'\u0432', '\u1c80', re.I | re.FALLBACK))
+    assertTrue(re.match(r'\u1c80', '\u0412', re.I | re.FALLBACK))
+    assertTrue(re.match(r'\u1c80', '\u0432', re.I | re.FALLBACK))
+
+    # Two different characters have the same multicharacter uppercase.
+    # assert '\ufb05'.upper() == '\ufb06'.upper() == 'ST' # 'ﬅ', 'ﬆ'
+    # SKIP in Go: assertTrue(re.match(r'\ufb05', '\ufb06', re.I | re.FALLBACK))
+    # SKIP in Go: assertTrue(re.match(r'\ufb06', '\ufb05', re.I | re.FALLBACK))
+
+def test_ignore_case_set_fallback():
+    assertTrue(re.match(r'[19A]', 'A', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[19a]', 'a', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[19a]', 'A', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[19A]', 'a', re.I | re.FALLBACK))
+    assertTrue(re.match(b'[19A]', b'A', re.I | re.FALLBACK))
+    assertTrue(re.match(b'[19a]', b'a', re.I | re.FALLBACK))
+    assertTrue(re.match(b'[19a]', b'A', re.I | re.FALLBACK))
+    assertTrue(re.match(b'[19A]', b'a', re.I | re.FALLBACK))
+
+    # Two different characters have the same lowercase.
+    # assert 'K'.lower() == '\u212a'.lower() == 'k' # 'K'
+    assertTrue(re.match(r'[19K]', '\u212a', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[19k]', '\u212a', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[19\u212a]', 'K', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[19\u212a]', 'k', re.I | re.FALLBACK))
+
+    # Two different characters have the same uppercase.
+    # assert 's'.upper() == '\u017f'.upper() == 'S' # 'ſ'
+    assertTrue(re.match(r'[19S]', '\u017f', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[19s]', '\u017f', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[19\u017f]', 'S', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[19\u017f]', 's', re.I | re.FALLBACK))
+
+    # Two different characters have the same uppercase. Unicode 9.0+.
+    # assert '\u0432'.upper() == '\u1c80'.upper() == '\u0412' # 'в', 'ᲀ', 'В'
+    assertTrue(re.match(r'[19\u0412]', '\u0432', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[19\u0412]', '\u1c80', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[19\u0432]', '\u0412', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[19\u0432]', '\u1c80', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[19\u1c80]', '\u0412', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[19\u1c80]', '\u0432', re.I | re.FALLBACK))
+
+    # Two different characters have the same multicharacter uppercase.
+    # assert '\ufb05'.upper() == '\ufb06'.upper() == 'ST' # 'ﬅ', 'ﬆ'
+    # SKIP in Go: assertTrue(re.match(r'[19\ufb05]', '\ufb06', re.I | re.FALLBACK))
+    # SKIP in Go: assertTrue(re.match(r'[19\ufb06]', '\ufb05', re.I | re.FALLBACK))
+
+def test_ignore_case_range_fallback():
+    # Issues #3511, #17381.
+    assertTrue(re.match(r'[9-a]', '_', re.I | re.FALLBACK))
+    assertIsNone(re.match(r'[9-A]', '_', re.I | re.FALLBACK))
+    assertTrue(re.match(b'[9-a]', b'_', re.I | re.FALLBACK))
+    assertIsNone(re.match(b'[9-A]', b'_', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[\xc0-\xde]', '\u00D7', re.I | re.FALLBACK))
+    assertIsNone(re.match(r'[\xc0-\xde]', '\u00F7', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[\xe0-\xfe]', '\u00F7', re.I | re.FALLBACK))
+    assertIsNone(re.match(r'[\xe0-\xfe]', '\u00D7', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[\u0430-\u045f]', '\u0450', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[\u0430-\u045f]', '\u0400', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[\u0400-\u042f]', '\u0450', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[\u0400-\u042f]', '\u0400', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[\U00010428-\U0001044f]', '\U00010428', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[\U00010428-\U0001044f]', '\U00010400', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[\U00010400-\U00010427]', '\U00010428', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[\U00010400-\U00010427]', '\U00010400', re.I | re.FALLBACK))
+
+    # Two different characters have the same lowercase.
+    # assert 'K'.lower() == '\u212a'.lower() == 'k' # 'K'
+    assertTrue(re.match(r'[J-M]', '\u212a', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[j-m]', '\u212a', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[\u2129-\u212b]', 'K', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[\u2129-\u212b]', 'k', re.I | re.FALLBACK))
+
+    # Two different characters have the same uppercase.
+    # assert 's'.upper() == '\u017f'.upper() == 'S' # 'ſ'
+    assertTrue(re.match(r'[R-T]', '\u017f', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[r-t]', '\u017f', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[\u017e-\u0180]', 'S', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[\u017e-\u0180]', 's', re.I | re.FALLBACK))
+
+    # Two different characters have the same uppercase. Unicode 9.0+.
+    # assert '\u0432'.upper() == '\u1c80'.upper() == '\u0412' # 'в', 'ᲀ', 'В'
+    assertTrue(re.match(r'[\u0411-\u0413]', '\u0432', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[\u0411-\u0413]', '\u1c80', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[\u0431-\u0433]', '\u0412', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[\u0431-\u0433]', '\u1c80', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[\u1c80-\u1c82]', '\u0412', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[\u1c80-\u1c82]', '\u0432', re.I | re.FALLBACK))
+
+    # Two different characters have the same multicharacter uppercase.
+    # assert '\ufb05'.upper() == '\ufb06'.upper() == 'ST' # 'ﬅ', 'ﬆ'
+    # SKIP in Go: assertTrue(re.match(r'[\ufb04-\ufb05]', '\ufb06', re.I | re.FALLBACK))
+    # SKIP in Go: assertTrue(re.match(r'[\ufb06-\ufb07]', '\ufb05', re.I | re.FALLBACK))
+
 def test_unicode_categories():
     for flag in (0, re.FALLBACK):
         assertTrue(re.match(r'[\w]', 'x', flag))
@@ -3799,6 +3924,9 @@ if WITH_FALLBACK:
     test_fallback()
     test_fallback_groups()
     test_ascii_and_unicode_flag_fallback()
+    test_ignore_case_fallback()
+    test_ignore_case_set_fallback()
+    test_ignore_case_range_fallback()
     test_unicode_categories()
     test_ascii_range_literals()
     test_ascii_full_range()
