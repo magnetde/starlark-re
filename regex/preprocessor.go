@@ -404,7 +404,7 @@ func writeSubranges(w *subPatternWriter, lo, hi rune) bool {
 	if subLo >= subr3 { // Only the subrange (4) still needs to be appended with its other cases.
 		// Determine the lower and upper limit within subrange (4).
 		lo = max(lo, subr4Start)
-		hi = max(hi, subr4End)
+		hi = min(hi, subr4End)
 
 		// Write both subranges
 		writeRangeCases(w, lo, hi)
@@ -418,9 +418,9 @@ func writeSubranges(w *subPatternWriter, lo, hi rune) bool {
 	lo2 := max(lo, subr2Start)
 	hi4 := min(hi, subr4End)
 
-	// If the two subranges (2) and (4) overlap (ignoring the case), then the
-	// ranges 'A' - 'Z' and 'a' - 'z' must be added to the regex pattern.
-	if lo2 <= upper(hi4) {
+	// If the two subranges (2) and (4) overlap or are adjacent (ignoring the case),
+	// then the ranges 'A' - 'Z' and 'a' - 'z' must be added to the regex pattern.
+	if lo2 <= upper(hi4)-1 {
 		writeRange(w, 'A', 'Z')
 		writeRange(w, 'a', 'z')
 		return true
@@ -439,8 +439,10 @@ func writeSubranges(w *subPatternWriter, lo, hi rune) bool {
 // the character `lo` and h represents character hi.
 func writeRange(w *subPatternWriter, lo, hi rune) {
 	w.writeLiteral(lo)
-	w.writeByte('-')
-	w.writeLiteral(hi)
+	if lo != hi {
+		w.writeByte('-')
+		w.writeLiteral(hi)
+	}
 }
 
 // writeRangeCases writes a range for `lo` to `hi` and a range covering the opposite case.

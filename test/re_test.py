@@ -3483,6 +3483,107 @@ def test_unicode_categories():
         assertTrue(re.match(r'[\S]', 'x', flag))
         assertIsNone(re.match(r'[\S]', ' ', flag))
 
+def ascii_range_flags():
+    return [flag | re.ASCII | re.IGNORECASE for flag in (0, re.FALLBACK)]
+
+def test_ascii_range_literals():
+    for flag in ascii_range_flags():
+        # ascii literals
+        assertTrue(re.match(r'xy', 'XY', flag))
+        assertTrue(re.match(r'xY', 'Xy', flag))
+        assertTrue(re.match(r'xy\u00E4', 'XY\u00E4', flag))
+        assertIsNone(re.match(r'xy\u00E4', 'XY\u00C4', flag))
+
+        # ranges as ascii literals
+        assertTrue(re.match(r'[x-x][y-y]', 'XY', flag))
+        assertTrue(re.match(r'[x-x][Y-Y]', 'Xy', flag))
+        assertTrue(re.match(r'[x-x][y-y][\u00E4-\u00E4]', 'XY\u00E4', flag))
+        assertIsNone(re.match(r'[x-x][y-y][\u00E4-\u00E4]', 'XY\u00C4', flag))
+
+def test_ascii_full_range():
+    for flag in ascii_range_flags():
+
+        # full range
+        for s in ['+', '0', '9', '=', 'A', 'Z', '^', 'a', 'z', '|']:
+            assertTrue(re.match(r'[!-}]', s, flag))
+
+def test_ascii_same_subrange():
+    for flag in ascii_range_flags():
+        # same subrange index
+        # 1
+        for s in ['+', '0', '9', '=', '@']:
+            assertTrue(re.match(r'[!-@]', s, flag))
+        assertIsNone(re.match(r'[!-@]', 'A', flag))
+        assertIsNone(re.match(r'[!-@]', 'a', flag))
+        # 2
+        for s in ['A', 'F', 'Z', 'a', 'f', 'z']:
+            assertTrue(re.match(r'[A-Z]', s, flag))
+        assertIsNone(re.match(r'[A-Z]', '0', flag))
+        # 3
+        for s in ['[', ']', '_', '`']:
+            assertTrue(re.match(r'[\x5b-\x60]', s, flag))
+        assertIsNone(re.match(r'[\x5b-\x60]', 'A', flag))
+        assertIsNone(re.match(r'[\x5b-\x60]', 'a', flag))
+        # 4
+        for s in ['A', 'F', 'Z', 'a', 'f', 'z']:
+            assertTrue(re.match(r'[a-z]', s, flag))
+        assertIsNone(re.match(r'[a-z]', '0', flag))
+        # 5
+        for s in ['{', '|', '}']:
+            assertTrue(re.match(r'[\x7b-\xff]', s, flag))
+        assertIsNone(re.match(r'[\x7b-\xff]', 'A', flag))
+        assertIsNone(re.match(r'[\x7b-\xff]', 'a', flag))
+        assertIsNone(re.match(r'[\x7b-\xff]', '0', flag))
+
+def test_ascii_overlapping():
+    for flag in ascii_range_flags():
+        # subrange 1-2
+        for s in ['0', '9', 'A', 'F', 'a', 'f']:
+            assertTrue(re.match(r'[0-F]', s, flag))
+        for s in ['G', 'Z', 'g', 'z']:
+            assertIsNone(re.match(r'[0-F]', s, flag))
+
+        # subrange 1-3
+        for s in ['0', '9', 'A', 'F', 'Z', 'a', 'f', 'z', '^', '_']:
+            assertTrue(re.match(r'[0-_]', s, flag))
+        assertIsNone(re.match(r'[0-_]', '|', flag))
+
+        # subrange 2-3
+        for s in ['F', 'Z', 'f', 'z', '^', '_']:
+            assertTrue(re.match(r'[F-_]', s, flag))
+        for s in ['/', 'A', 'E', 'a', 'e', '`', '|']:
+            assertIsNone(re.match(r'[F-_]', s, flag))
+
+        # subrange 3-4
+        for s in ['_', 'a', 'z', 'A', 'Z', '|']:
+            assertTrue(re.match(r'[_-|]', s, flag))
+        for s in ['0', '~']:
+            assertIsNone(re.match(r'[_-|]', s, flag))
+
+        # subrange 4-5
+        for s in ['m', 'z', 'M', 'Z', '|']:
+            assertTrue(re.match(r'[m-|]', s, flag))
+        for s in ['0', 'a', 'l', 'A', 'L', '~']:
+            print(r'[m-|]', s, flag)
+            assertIsNone(re.match(r'[m-|]', s, flag))
+
+def test_ascii_subrange_letters():
+    # subranges 2 and 4 partially in the range
+    for flag in ascii_range_flags():
+        # overlapping
+        for s in [chr(c) for c in range(ord('A'), ord('z') + 1)]:
+            assertTrue(re.match(r'[A-a]', s, flag))
+            assertTrue(re.match(r'[B-f]', s, flag))
+            assertTrue(re.match(r'[F-h]', s, flag))
+            assertTrue(re.match(r'[N-m]', s, flag))
+            assertTrue(re.match(r'[X-z]', s, flag))
+
+        # non-overlapping
+        for s in ['H', 'I', 'Z', 'A', 'C', 'h', 'i', 'z', 'a', 'c', '_']:
+            assertTrue(re.match(r'[H-c]', s, flag))
+        for s in ['D', 'E', 'G', 'd', 'e', 'g']:
+            assertIsNone(re.match(r'[H-c]', s, flag))
+
 def test_no_fallback():
     assertRaises(lambda: re.FALLBACK)
     assertRaises(lambda: re.compile(r'(x)(?!y)'))
@@ -3699,6 +3800,11 @@ if WITH_FALLBACK:
     test_fallback_groups()
     test_ascii_and_unicode_flag_fallback()
     test_unicode_categories()
+    test_ascii_range_literals()
+    test_ascii_full_range()
+    test_ascii_same_subrange()
+    test_ascii_overlapping()
+    test_ascii_subrange_letters()
 else:
     test_no_fallback()
 

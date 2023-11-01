@@ -243,9 +243,7 @@ func dumpNode(b *strings.Builder, n *regexNode, level int) {
 			maxval = "MAXREPEAT"
 		}
 		writeParams(p.min, maxval, p.item)
-	case opRange:
-		p := n.params.(rangeParams)
-		writeParams(p.lo, p.hi)
+	case opRange: // already printed at IN node
 	case opSubpattern:
 		p := n.params.(subPatternParam)
 
@@ -488,8 +486,11 @@ func (w *subPatternWriter) writeNode(n *regexNode, ctx *subPatternContext) {
 		p := n.params.(rangeParams)
 
 		w.writeLiteral(p.lo)
-		w.writeByte('-')
-		w.writeLiteral(p.hi)
+
+		if p.lo != p.hi {
+			w.writeByte('-')
+			w.writeLiteral(p.hi)
+		}
 	case opSubpattern:
 		p := n.params.(subPatternParam)
 
