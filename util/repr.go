@@ -6,6 +6,7 @@ import (
 	"unicode/utf8"
 )
 
+// Digits of hex strings.
 var hexDigits = "0123456789abcdef"
 
 // Repr returns a representation of an string.

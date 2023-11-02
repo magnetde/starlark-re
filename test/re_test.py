@@ -3689,7 +3689,6 @@ def test_ascii_overlapping():
         for s in ['m', 'z', 'M', 'Z', '|']:
             assertTrue(re.match(r'[m-|]', s, flag))
         for s in ['0', 'a', 'l', 'A', 'L', '~']:
-            print(r'[m-|]', s, flag)
             assertIsNone(re.match(r'[m-|]', s, flag))
 
 def test_ascii_subrange_letters():

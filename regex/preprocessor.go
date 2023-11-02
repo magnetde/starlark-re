@@ -5,6 +5,16 @@ import (
 	"regexp/syntax"
 	"strings"
 	"unicode"
+
+	// Necessary for go:linkname
+	_ "unsafe"
+)
+
+const (
+	// minimum and maximum characters involved in folding.
+	minFold        = 0x0041
+	maxFoldASCII   = 0x007a
+	maxFoldUnicode = 0x1e943
 )
 
 // preprocessor is a type, that converts a Python-compatible regex pattern to regex pattern,
@@ -83,7 +93,7 @@ func isGoIdentifer(name string) bool {
 func (p *preprocessor) stdPattern() string {
 	var b strings.Builder
 
-	p.writeFlags(&b, false)
+	p.writeFlags(&b, true)
 
 	// Create the pattern string with the default replacer.
 	p.p.write(&b, p.isStr, func(w *subPatternWriter, n *regexNode, ctx *subPatternContext) bool {
@@ -94,23 +104,23 @@ func (p *preprocessor) stdPattern() string {
 }
 
 // writeFlags writes a group of global regex flags into a string builder.
-// If `allowUnicode` is true, than the unicode flag is also added, if enabled.
-func (p *preprocessor) writeFlags(w *strings.Builder, allowUnicode bool) {
+// If the `std` parameter is true, then the current regex pattern should be
+// compatible with the standard regex engine. If this is not the case or if
+// the current regex should only ignore cases for ASCII characters, then the
+// preprocessor will do the case ignoring.
+func (p *preprocessor) writeFlags(w *strings.Builder, std bool) {
 	flags := p.flags()
-	if flags&FlagIgnoreCase != 0 {
-		if flags&FlagASCII != 0 || !p.isStr {
-			// Remove the IGNORECASE flag if it is enabled together with the ASCII flag or if the current
-			// pattern is of type bytes, because then the preprocessor handles the case ignoring.
-			flags &= ^FlagIgnoreCase
-		}
+
+	// Remove the IGNORECASE flag if the case ignoring should be done by the preprocessor:
+	// If the flag is enabled together with the ASCII flag or if the current pattern is of type bytes.
+	if !std || flags&FlagASCII != 0 || !p.isStr {
+		flags &= ^FlagIgnoreCase
+	}
+	if std {
+		flags &= ^FlagUnicode
 	}
 
-	supported := supportedFlags
-	if allowUnicode {
-		supported |= FlagUnicode
-	}
-
-	if flags&supported != 0 {
+	if flags&(supportedFlags|FlagUnicode) != 0 {
 		w.WriteString("(?")
 
 		if flags&FlagIgnoreCase != 0 {
@@ -122,7 +132,7 @@ func (p *preprocessor) writeFlags(w *strings.Builder, allowUnicode bool) {
 		if flags&FlagDotAll != 0 {
 			w.WriteByte('s')
 		}
-		if allowUnicode && flags&FlagUnicode != 0 {
+		if flags&FlagUnicode != 0 {
 			w.WriteByte('u')
 		}
 
@@ -167,25 +177,12 @@ func (p *preprocessor) defaultReplacer(w *subPatternWriter, n *regexNode, ctx *s
 	if ctx.group != nil {
 		addFlags := ctx.group.addFlags
 		delFlags := ctx.group.delFlags
-
-		if addFlags&FlagUnicode != 0 || delFlags&FlagASCII != 0 {
-			flags |= FlagUnicode
-			flags &= ^FlagASCII
-		}
-		if addFlags&FlagASCII != 0 || delFlags&FlagUnicode != 0 {
-			flags |= FlagASCII
-			flags &= ^FlagUnicode
-		}
+		flags = combineFlags(flags, addFlags, delFlags)
 	}
 
-	unicode := false
-	asciiCase := false
-
-	if flags&FlagUnicode != 0 {
-		unicode = true
-	} else if flags&FlagIgnoreCase != 0 {
-		asciiCase = flags&FlagASCII != 0 || !p.isStr
-	}
+	isUnicode := flags&FlagUnicode != 0
+	ignorecase := flags&FlagIgnoreCase != 0
+	ascii := flags&FlagASCII != 0 || !p.isStr
 
 	switch n.opcode {
 	case opCategory:
@@ -194,7 +191,7 @@ func (p *preprocessor) defaultReplacer(w *subPatternWriter, n *regexNode, ctx *s
 		// as `regexp.Regexp` only matches ASCII patterns by default.
 		// Categories are always inside of character sets.
 
-		if !p.isStr || !unicode {
+		if !isUnicode {
 			return false
 		}
 
@@ -230,49 +227,67 @@ func (p *preprocessor) defaultReplacer(w *subPatternWriter, n *regexNode, ctx *s
 
 		// Add the character class by adding all ranges.
 
-		r, err := buildUnicodeRange(category)
+		r, err := buildUnicodeRanges(category)
 		if err != nil {
 			return false
 		}
 
-		for i := 0; i < len(r); i += 2 {
-			lo, hi := r[i], r[i+1]
-
-			w.writeLiteral(lo)
-			if lo != hi {
-				w.writeByte('-')
-				w.writeLiteral(hi)
-			}
-		}
+		writeRanges(w, r)
 
 		return true
 	case opLiteral:
-		if !asciiCase {
+		if !ignorecase || (std && !ascii) {
 			return false
 		}
 
-		return writeLiteralCases(w, n.c, ctx.inSet)
+		// If the IGNORECASE flag is set and the pattern should be compatible with the fallback engine or the ASCII flag is set,
+		// then the preprocessor fully handles case ignoring. For the fallback engine, the preprocessor always has to handle
+		// the case ignoring since the fallback engine compares characters differently from the standard engine.
+
+		// Create all cases for `n.c` by creating a folded range `c-c`.
+		r := createFoldedRanges(n.c, n.c, ascii)
+
+		if len(r) == 2 && r[0] == r[1] {
+			// If the folded range only contains one element, then write it as a literal.
+			w.writeLiteral(r[0])
+		} else if ctx.inSet {
+			writeRanges(w, r)
+		} else {
+			w.writeByte('[')
+			writeRanges(w, r)
+			w.writeByte(']')
+		}
+
+		return true
 	case opRange:
-		if !asciiCase {
+		if !ignorecase || (std && !ascii) {
 			return false
 		}
+
+		// See the comment at case `opLiteral`.
 
 		p := n.params.(rangeParams)
 
-		// If the first and last character of the range are the same,
-		// the range is be written as a literal matching both cases.
-		if p.lo == p.hi {
-			return writeLiteralCases(w, p.lo, ctx.inSet)
-		}
+		r := createFoldedRanges(p.lo, p.hi, ascii)
+		writeRanges(w, r)
 
-		writeSubranges(w, p.lo, p.hi)
+		return true
 	}
 
 	return false
 }
 
-// buildRange creates a range, that includes all unicode characters matching the regex category.
-func buildUnicodeRange(c catcode) ([]rune, error) {
+// combineFlags determines the flags of the current subpattern by combining the global flags
+// with the added and deleted flags of this subpattern.
+func combineFlags(flags, addFlags, delFlags uint32) uint32 {
+	if addFlags&typeFlags != 0 {
+		flags &= ^typeFlags
+	}
+	return (flags | addFlags) & ^delFlags
+}
+
+// buildUnicodeRanges creates a slice of ranges, that includes all unicode characters matching the regex category.
+func buildUnicodeRanges(c catcode) ([]rune, error) {
 	r, ok := unicodeRanges[c]
 	if !ok {
 		return nil, fmt.Errorf("unknown category %d", c)
@@ -290,200 +305,91 @@ func buildUnicodeRange(c catcode) ([]rune, error) {
 	return re.Rune, nil
 }
 
-// writeLiteralCases writes both cases if the literal `c` to the pattern, if it is an ASCII letter.
-// If the literal is not inside a set, it is replaced with a set containing both cases.
-// Otherwise, if the literal is inside a set, both cases are added to the set.
-func writeLiteralCases(w *subPatternWriter, c rune, inSet bool) bool {
-	o := oppositeASCIICase(c)
-	if c == o { // no other ASCII case exists
-		return false
-	}
+// writeRanges writes the slice of ranges to the subpattern writer.
+func writeRanges(w *subPatternWriter, r []rune) {
+	for i := 0; i < len(r); i += 2 {
+		lo, hi := r[i], r[i+1]
 
-	if !inSet {
-		w.writeByte('[')
-		w.writeLiteral(c)
-		w.writeLiteral(o)
-		w.writeByte(']')
+		w.writeLiteral(lo)
+		if lo != hi {
+			w.writeByte('-')
+			w.writeLiteral(hi)
+		}
+	}
+}
+
+// createFoldedRanges creates a slice of ranges, which contains all cases of the characters from `lo` to `hi`.
+// If `ascii` is set to true, this function only determines different cases of ASCII characters.
+// The resulting slice of ranges is sorted and any overlapping ranges are merged together.
+// See also `appendFoldedRange` of package `regexp/syntax`.
+func createFoldedRanges(lo, hi rune, ascii bool) []rune {
+	var r []rune
+
+	var maxFold rune
+	if ascii {
+		maxFold = maxFoldASCII
 	} else {
-		w.writeLiteral(c)
-		w.writeLiteral(o)
+		maxFold = maxFoldUnicode
 	}
 
-	return true
-}
-
-// oppositeASCIICase returns the opposite case of character 'c'.
-// If 'c' is not an ASCII character or has no opposite case, it is returned without change.
-func oppositeASCIICase(c rune) rune {
-	if 'A' <= c && c <= 'Z' {
-		return lower(c)
+	// Optimizations.
+	if lo <= minFold && hi >= maxFold {
+		// Range is full: folding can't add more.
+		return appendRange(r, lo, hi)
 	}
-	if 'a' <= c && c <= 'z' {
-		return upper(c)
+	if hi < minFold || lo > maxFold {
+		// Range is outside folding possibilities.
+		return appendRange(r, lo, hi)
 	}
-	return c
-}
-
-// lower returns the corresponding lowercase letter for any ASCII letter between 'A' and 'Z'.
-func lower(c rune) rune {
-	return c - 'A' + 'a'
-}
-
-// upper returns the corresponding uppercase letter for any ASCII letter between 'a' and 'z'.
-func upper(c rune) rune {
-	return c - 'a' + 'A'
-}
-
-// writeSubranges writes the specified range, together with an range that matches the ASCII
-// letters of opposite case in this range. This is done by splitting the range into up to
-// five subranges:
-// (1) characters from \x00 to \x40 ('\0' to 'A' - 1)
-// (2) characters from \x41 to \x5a ('A' to 'Z')
-// (3) characters from \x5b to \x60 ('Z' + 1 to 'a' - 1)
-// (4) characters from \x61 to \x7a ('a' to 'z')
-// (5) characters from \x7b         ('z' + 1)
-//
-// If subranges (2) or (4) are not present, the range does not needs to be modified.
-// If both subranges exist and are fully covered, the range also does not need to be modified.
-// Otherwise, the subranges (1) to (5) are appended as normal, if they exist.
-// If both subranges (2) and (4) exist, then the corresponding subrange with the
-// opposite case are appended. Whenever possible, the subranges (2), (4) and their
-// equivalent cases are simplified.
-func writeSubranges(w *subPatternWriter, lo, hi rune) bool {
-	if lo <= subr2Start && subr4End <= hi {
-		// If the subranges (2) and (4) are fully covered by the range,
-		// it does not need to be modified.
-		return false
+	if lo < minFold {
+		// [lo, minFold-1] needs no folding.
+		r = appendRange(r, lo, minFold-1)
+		lo = minFold
+	}
+	if hi > maxFold {
+		// [maxFold+1, hi] needs no folding.
+		r = appendRange(r, maxFold+1, hi)
+		hi = maxFold
 	}
 
-	subLo := subrangeIndex(lo)
-	subHi := subrangeIndex(hi)
+	// Determine the folding function.
+	var fold func(c rune) rune
+	if ascii {
+		fold = simpleFoldASCII
+	} else {
+		fold = unicode.SimpleFold
+	}
 
-	if subLo == subHi {
-		// Simplest case: If lo and hi are within the same subrange, it means
-		// that they are either both ASCII letters or not.
-		switch subLo {
-		case subr2, subr4: // both are ASCII letters
-			writeRangeCases(w, lo, hi)
-			return true
-		default: // do not handle the other range
-			return false
+	// Brute force. Depend on appendRange to coalesce ranges on the fly.
+	for c := lo; c <= hi; c++ {
+		r = appendRange(r, c, c)
+		for f := fold(c); f != c; f = fold(f) {
+			r = appendRange(r, f, f)
 		}
 	}
 
-	// At this case, the values of lo and hi are inside of different subranges and not fully
-	// covered. This means that ASCII letters are included in the range, because each subrange
-	// that does not represent ASCII letters is adjacent to a subrange that does represent
-	// ASCII letters.
-
-	// At first, append all subranges, that do not represent ASCII letters, so (1), (3) and (5).
-
-	if subLo == subr1 { // append subrange (1), if it is included
-		writeRange(w, lo, min(hi, subr1End))
-	}
-	if subLo <= subr3 && subr3 <= subHi { // append subrange (3), if it is included
-		writeRange(w, max(lo, subr3Start), min(hi, subr3End))
-	}
-	if subHi == subr5 { // append subrange (5), if it is included
-		writeRange(w, max(lo, subr5Start), hi)
-	}
-
-	// Now the subranges containing ASCII characters should be considered.
-	// First, consider the case where only one of the ASCII subranges is included in the range.
-
-	if subHi <= subr3 { // Only the subrange (2) still needs to be appended with its other cases.
-		// Determine the lower and upper limit within subrange (2).
-		lo = max(lo, subr2Start)
-		hi = min(hi, subr2End)
-
-		// Write both subranges
-		writeRangeCases(w, lo, hi)
-		return true
-	}
-
-	if subLo >= subr3 { // Only the subrange (4) still needs to be appended with its other cases.
-		// Determine the lower and upper limit within subrange (4).
-		lo = max(lo, subr4Start)
-		hi = min(hi, subr4End)
-
-		// Write both subranges
-		writeRangeCases(w, lo, hi)
-		return true
-	}
-
-	// Both the subrange (2) and (4) exist in the range.
-
-	// Determine the lower limit within subrange (2)
-	// and the upper limit within subrange (4):
-	lo2 := max(lo, subr2Start)
-	hi4 := min(hi, subr4End)
-
-	// If the two subranges (2) and (4) overlap or are adjacent (ignoring the case),
-	// then the ranges 'A' - 'Z' and 'a' - 'z' must be added to the regex pattern.
-	if lo2 <= upper(hi4)-1 {
-		writeRange(w, 'A', 'Z')
-		writeRange(w, 'a', 'z')
-		return true
-	}
-
-	// Both ranges are not overlapping, so it is necessary to manually
-	// add the range covering the opposite case for both ranges.
-
-	writeRangeCases(w, lo2, subr2End)
-	writeRangeCases(w, subr4Start, hi4)
-
-	return true
+	// Sort and simplify ranges.
+	return cleanClass(&r)
 }
 
-// writeRange writes the range in format "l-h", where l represents
-// the character `lo` and h represents character hi.
-func writeRange(w *subPatternWriter, lo, hi rune) {
-	w.writeLiteral(lo)
-	if lo != hi {
-		w.writeByte('-')
-		w.writeLiteral(hi)
-	}
-}
-
-// writeRangeCases writes a range for `lo` to `hi` and a range covering the opposite case.
-// The characters `lo` and `hi` must be ASCII letters from the same subrange.
-func writeRangeCases(w *subPatternWriter, lo, hi rune) {
-	writeRange(w, lo, hi)
-	writeRange(w, oppositeASCIICase(lo), oppositeASCIICase(hi))
-}
-
-// Constants for subranges
-const (
-	subr1 = iota
-	subr2
-	subr3
-	subr4
-	subr5
-
-	subr1End   = 'A' - 1
-	subr2Start = 'A'
-	subr2End   = 'Z'
-	subr3Start = 'Z' + 1
-	subr3End   = 'a' - 1
-	subr4Start = 'a'
-	subr4End   = 'z'
-	subr5Start = 'z' + 1
-)
-
-// subrangeIndex returns the index of the subrange in which the character c is included.
-func subrangeIndex(c rune) int {
-	if c <= subr1End {
-		return subr1
-	} else if c <= subr2End {
-		return subr2
-	} else if c <= subr3End {
-		return subr3
-	} else if c <= subr4End {
-		return subr4
+// simpleFoldASCII is the equivalent function of `unicode.SimpleFold` for ASCII characters.
+func simpleFoldASCII(c rune) rune {
+	if 'A' <= c && c <= 'Z' {
+		return c - 'A' + 'a'
+	} else if 'a' <= c && c <= 'z' {
+		return c - 'a' + 'A'
 	} else {
-		return subr5
+		return c
 	}
 }
+
+// Link function from package `regexp/syntax` instead of copy and paste them:
+
+//go:linkname appendRange regexp/syntax.appendRange
+func appendRange(r []rune, lo, hi rune) []rune
+
+//go:linkname cleanClass regexp/syntax.cleanClass
+func cleanClass(rp *[]rune) []rune
 
 // fallbackPattern builds a preprocessed regex pattern compatible with the `regexp2.Regexp`.
 // This pattern is almost identical to the one produced by `stdPattern`, with the exception of not
@@ -496,7 +402,7 @@ func subrangeIndex(c rune) int {
 func (p *preprocessor) fallbackPattern() string {
 	var b strings.Builder
 
-	p.writeFlags(&b, true)
+	p.writeFlags(&b, false)
 
 	p.p.write(&b, p.isStr, func(w *subPatternWriter, n *regexNode, ctx *subPatternContext) bool {
 		if p.defaultReplacer(w, n, ctx, false) {

@@ -90,8 +90,8 @@ These unsupported elements include:
 
 If the regular expression pattern does not include any unsupported elements, it is preprocessed and
 then compiled with the default regex engine.
-The preprocessor will make necessary modifications to literals and character classes
-in the pattern to support flags such as `re.UNICODE` or `re.IGNORECASE|re.ASCII`.
+The preprocessor will make necessary modifications to literals, ranges and character classes in the
+pattern so flags such as `re.UNICODE`, `re.IGNORECASE` or `re.ASCII` work exactly like expected.
 
 In case that the regex pattern includes unsupported elements, the regex engine [regexp2.Regexp](https://pkg.go.dev/github.com/dlclark/regexp2),
 that supports all of these elements except for possessive repeat, is used instead.

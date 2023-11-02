@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -567,29 +568,38 @@ func (w *subPatternWriter) writeInt(i int) {
 	w.writeString(strconv.Itoa(i))
 }
 
+// Digits of hex strings.
+var hexDigits = "0123456789abcdef"
+
 // writeLiteral writes the literal to the subpattern writer.
 // The value is always appended in hexadecimal format, as it is clear and unambiguous
 // without introducing any scoping errors in the parser of the regex engine.
 // It will have either the format "\x.." or "\x{...}".
-func (w *subPatternWriter) writeLiteral(r rune) {
-	l := utf8.RuneLen(r)
-
+func (w *subPatternWriter) writeLiteral(c rune) {
 	w.writeString(`\x`)
 
-	s := strconv.FormatInt(int64(r), 16)
-	if l == 1 || (!w.isStr && r <= 0xff) {
-		if r <= 0xf {
-			w.writeByte('0')
-		}
-		w.writeString(s)
+	if c <= unicode.MaxASCII || (!w.isStr && c <= 0xff) {
+		w.writeByte(hexDigits[(c>>4)&0xf])
+		w.writeByte(hexDigits[c&0xf])
 	} else {
-		l = 2 * min(l, 2) // 2 chars per byte
-
 		w.writeByte('{')
-		if len(s) < l {
-			w.writeString(strings.Repeat("0", l-len(s)))
+
+		switch max(utf8.RuneLen(c), 2) {
+		default:
+			w.writeByte(hexDigits[(c>>28)&0xf])
+			w.writeByte(hexDigits[(c>>24)&0xf])
+			fallthrough
+		case 3:
+			w.writeByte(hexDigits[(c>>20)&0xf])
+			w.writeByte(hexDigits[(c>>16)&0xf])
+			fallthrough
+		case 2:
+			w.writeByte(hexDigits[(c>>12)&0xf])
+			w.writeByte(hexDigits[(c>>8)&0xf])
+			w.writeByte(hexDigits[(c>>4)&0xf])
+			w.writeByte(hexDigits[c&0xf])
 		}
-		w.writeString(s)
+
 		w.writeByte('}')
 	}
 }
