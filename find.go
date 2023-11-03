@@ -6,17 +6,19 @@ import (
 	"github.com/magnetde/starlark-re/regex"
 )
 
-// findMatch searches the first match of pattern `r` in `s`, starting the search at position `pos`.
-// The `longest` parameter determines whether to perform the longest search.
-func findMatch(r regex.Engine, s string, pos int, longest bool) ([]int, error) {
-	in := r.BuildInput(s)
+// findMatch searches the first match of pattern `r` in `s`, starting the search at position `pos`
+// and searching until position `endpos`. The `longest` parameter determines whether to perform the
+// longest search.
+func findMatch(r regex.Engine, s string, pos, endpos int, longest bool) ([]int, error) {
+	in := r.BuildInput(s, endpos)
 	return in.Find(pos, longest, nil)
 }
 
 // findMatches returns all matches of pattern `r` in `s`, starting the search at position `pos` and
-// finding at most of `n` matches. The results are passed to the caller via the `deliver` function.
-func findMatches(r regex.Engine, s string, pos int, n int, deliver func(a []int) error) error {
-	in := r.BuildInput(s)
+// and searching until position `endpos`, finding at most of `n` matches. The results are passed to
+// the caller via the `deliver` function.
+func findMatches(r regex.Engine, s string, pos, endpos int, n int, deliver func(a []int) error) error {
+	in := r.BuildInput(s, endpos)
 
 	end := len(s)
 	lastMatch := [2]int{-1, 0}

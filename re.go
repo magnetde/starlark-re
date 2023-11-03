@@ -460,9 +460,7 @@ func regexSearch(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Value, e
 		return nil, err
 	}
 
-	s := str.value[:endpos]
-
-	match, err := findMatch(p.re, s, pos, false)
+	match, err := findMatch(p.re, str.value, pos, endpos, false)
 	if err != nil {
 		return nil, err
 	}
@@ -525,9 +523,7 @@ func regexMatch(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Value, er
 		return nil, err
 	}
 
-	s := str.value[:endpos]
-
-	match, err := findMatch(p.re, s, pos, false)
+	match, err := findMatch(p.re, str.value, pos, endpos, false)
 	if err != nil {
 		return nil, err
 	}
@@ -566,9 +562,7 @@ func regexFullmatch(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Value
 		return nil, err
 	}
 
-	s := str.value[:endpos]
-
-	match, err := findMatch(p.re, s, pos, true /* find longest */)
+	match, err := findMatch(p.re, str.value, pos, endpos, true /* find longest */)
 	if err != nil {
 		return nil, err
 	}
@@ -643,10 +637,10 @@ func regexFindall(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Value, 
 		return nil, err
 	}
 
-	s := str.value[:endpos]
+	s := str.value
 	var l []starlark.Value
 
-	err = findMatches(p.re, s, pos, 0, func(match []int) error {
+	err = findMatches(p.re, s, pos, endpos, 0, func(match []int) error {
 		n := len(match) / 2
 
 		var v starlark.Value
@@ -711,10 +705,9 @@ func regexFinditer(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Value,
 		return nil, err
 	}
 
-	s := str.value[:endpos]
 	var v starlark.Tuple
 
-	err = findMatches(p.re, s, pos, 0, func(match []int) error {
+	err = findMatches(p.re, str.value, pos, endpos, 0, func(match []int) error {
 		v = append(v, newMatch(p, str, match, pos, endpos))
 		return nil
 	})

@@ -11,7 +11,7 @@ func split(p *Pattern, str strOrBytes, maxSplit int) (*starlark.List, error) {
 	beg := 0
 	end := 0
 
-	err := findMatches(p.re, s, 0, maxSplit, func(match []int) error {
+	err := findMatches(p.re, s, 0, len(s), maxSplit, func(match []int) error {
 		end = match[0]
 
 		list = append(list, p.pattern.asType(s[beg:end]))

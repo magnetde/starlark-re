@@ -172,7 +172,7 @@ func sub(p *Pattern, r matchReplacer, str strOrBytes, count int, subn bool) (sta
 	beg := 0
 	end := 0
 
-	err := findMatches(p.re, s, 0, count, func(match []int) error {
+	err := findMatches(p.re, s, 0, len(s), count, func(match []int) error {
 		end = match[0]
 
 		b.WriteString(s[beg:end])

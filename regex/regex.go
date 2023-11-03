@@ -47,8 +47,9 @@ type Engine interface {
 	// string to the regex engine, the search string has to be modified, and afterwards
 	// the positions of matches have to be adjusted. To improve performance, the search
 	// string is only be processed once and a new object is created for regex search
-	// operations.
-	BuildInput(s string) Input
+	// operations. A maximum of `endpos` bytes are extracted from `s`. `endpos` must be
+	// within the range of `[0, len(s)]`.
+	BuildInput(s string, endpos int) Input
 }
 
 // Input is the type to perform a regex search.
@@ -207,8 +208,8 @@ func (r *stdRegex) SupportsLongest() bool {
 }
 
 // BuildInput is the implementation of the `BuildInput` function for the `Engine` interface.
-func (r *stdRegex) BuildInput(s string) Input {
-	s, offsets := r.replaceInvalidChars(s)
+func (r *stdRegex) BuildInput(s string, endpos int) Input {
+	s, offsets := r.replaceInvalidChars(s, endpos)
 
 	i := &stdInput{
 		re:      r,
@@ -224,27 +225,35 @@ func (r *stdRegex) BuildInput(s string) Input {
 // arbitrary bytes, even if a bytes value is passed to the `doExecute` function instead of a string.
 // If the string does not contain any invalid illegal UTF-8 codepoints,
 // it is returned without modification, and no offset slice is returned.
-func (r *stdRegex) replaceInvalidChars(s string) (string, []int) {
+// A maximum of `endpos` bytes are extracted from `s`.
+func (r *stdRegex) replaceInvalidChars(s string, endpos int) (string, []int) {
 	if r.isStr {
 		if utf8.ValidString(s) { // skip if no invalid utf8 values exist
-			return s, nil
+			return s[:endpos], nil
 		}
 	} else {
 		if isASCIIString(s) { // skip if only ascii characters exist
-			return s, nil
+			return s[:endpos], nil
 		}
 	}
 
 	var b strings.Builder
-	b.Grow(len(s) + 4) // reserve 4 extra bytes
+	b.Grow(endpos + 4) // reserve 4 extra bytes
 
-	offsets := make([]int, 0, len(s)+4+1) // reserve 4 extra offsets (+1 for the last offset)
+	offsets := make([]int, 0, endpos+1+4) // reserve 4 extra offsets (+1 for the last offset)
 	offset := 0
 
 	if r.isStr {
+		bytes := 0
+
 		for len(s) > 0 {
 			// Get the next UTF-8 codepoint
 			c, size := utf8.DecodeRuneInString(s)
+
+			bytes += size
+			if bytes > endpos {
+				break
+			}
 
 			if c != utf8.RuneError {
 				b.WriteRune(c)
@@ -269,7 +278,7 @@ func (r *stdRegex) replaceInvalidChars(s string) (string, []int) {
 		}
 	} else {
 		// Iterate over the bytes in `s` instead of characters.
-		for i := 0; i < len(s); i++ {
+		for i := 0; i < endpos; i++ {
 			c := s[i]
 			if c <= unicode.MaxASCII {
 				b.WriteByte(c)
@@ -279,14 +288,14 @@ func (r *stdRegex) replaceInvalidChars(s string) (string, []int) {
 			} else {
 				b.WriteRune(rune(c))
 
-				// See the comment above for invalid characters at strings.
+				// See the comment above for invalid characters in strings.
 				offsets = append(offsets, offset, offset-1)
 				offset--
 			}
 		}
 	}
 
-	// Append a last offset value, that corresponds to `len(s)`.
+	// Append a last offset value, that corresponds to `endpos`.
 	offsets = append(offsets, offset)
 
 	return b.String(), offsets
@@ -376,8 +385,8 @@ func (r *fallbEngine) SupportsLongest() bool {
 }
 
 // BuildInput is the implementation of the `BuildInput` function for the `Engine` interface.
-func (r *fallbEngine) BuildInput(s string) Input {
-	chars, offsetsRune, offsetsByte := r.getRuneOffsets(s)
+func (r *fallbEngine) BuildInput(s string, endpos int) Input {
+	chars, offsetsRune, offsetsByte := r.getRuneOffsets(s, endpos)
 
 	return &fallbInput{
 		re:          r,
@@ -394,25 +403,33 @@ func (r *fallbEngine) BuildInput(s string) Input {
 // and another one to convert the character positions in the modified character slice back to byte
 // positions in the original input string `s`.
 // If the string contains only ASCII characters, creating offset slices is not needed.
-func (r *fallbEngine) getRuneOffsets(s string) ([]rune, []int, []int) {
-	chars := make([]rune, 0, len(s))
+// A maximum of `endpos` bytes are extracted from `s`.
+func (r *fallbEngine) getRuneOffsets(s string, endpos int) ([]rune, []int, []int) {
+	chars := make([]rune, 0, endpos)
 
 	if !r.isStr || isASCIIString(s) {
 		// For ascii strings and bytes, all bytes are converted to its rune value and positions will not change.
-		for i := 0; i < len(s); i++ {
+		for i := 0; i < endpos; i++ {
 			chars = append(chars, rune(s[i]))
 		}
 
 		return chars, nil, nil
 	}
 
-	offsetsRune := make([]int, 0, len(s))   // convert byte positions to character positions offsets
-	offsetsByte := make([]int, 0, len(s)+4) // convert character positions to byte positions; reserve 4 extra offsets
-	offsetByte := 0                         // `offsetByte` is the current difference in positions between character and bytes
+	offsetsRune := make([]int, 0, endpos+1)   // convert byte positions to character positions offsets
+	offsetsByte := make([]int, 0, endpos+1+4) // convert character positions to byte positions; reserve 4 extra offsets
+	offsetByte := 0                           // `offsetByte` is the current difference in positions between character and bytes
+	bytes := 0
 
 	for len(s) > 0 {
 		// Get the next UTF-8 codepoint
 		c, size := utf8.DecodeRuneInString(s)
+
+		bytes += size
+		if bytes > endpos {
+			break
+		}
+
 		incr := size
 
 		if c == utf8.RuneError {
@@ -422,8 +439,9 @@ func (r *fallbEngine) getRuneOffsets(s string) ([]rune, []int, []int) {
 
 		chars = append(chars, c)
 
-		for i := 0; i < size; i++ {
-			offsetsRune = append(offsetsRune, len(chars)-1)
+		offsetsRune = append(offsetsRune, len(chars)-1)
+		for i := 1; i < size; i++ { // The following offsets belong to the next character.
+			offsetsRune = append(offsetsRune, len(chars))
 		}
 
 		offsetsByte = append(offsetsByte, offsetByte)
@@ -432,7 +450,7 @@ func (r *fallbEngine) getRuneOffsets(s string) ([]rune, []int, []int) {
 		s = s[size:] // if the rune is not valid, the size returned is 1, so slicing with `size` is correct
 	}
 
-	// Append a last element, corresponding to `len(s)`.
+	// Append a last element, corresponding to `endpos`.
 	offsetsByte = append(offsetsByte, offsetByte)
 
 	return chars, offsetsRune, offsetsByte
