@@ -2774,7 +2774,7 @@ def test_fail():
     assertEqual(re.search(r'12(?!)|3', '123')[0], '3')
 
 def get_debug_out(pat):
-    return capture_output(lambda: re.compile(pat, re.DEBUG))
+    return capture_output(lambda: re.compile(pat, re.DEBUG))[1]
 
 def test_debug_flag():
     pat = r'(\.)(?:[ch]|py)(?(1)$|: )'
@@ -3708,6 +3708,23 @@ def test_ascii_subrange_letters():
         for s in ['D', 'E', 'G', 'd', 'e', 'g']:
             assertIsNone(re.match(r'[H-c]', s, flag))
 
+def test_regex_node_equals():
+    # test the equals function of regex nodes by compiling regex patterns
+    # of type a|b|c|... and then letting the parser simplify the parsed expressions.
+
+    assertIsNone(re.match(r'(?!)x|(?!)y|(?!)z', 'x'))
+    assertTrue(re.match(r'.x|.y|.z', '!y'))
+    assertTrue(re.search(r'(?<=a)x|(?<=a)y|(?<=a)z', 'ay'))
+    assertTrue(re.match(r'^x|^y|^z', 'y'))
+    assertTrue(re.match(r'(?:a|.)x|(?:a|.)y|(?:a|.)z', 'ay'))
+    assertTrue(re.match(r'(a)(\1x|\1y|\1z)', 'aay'))
+    assertTrue(re.match(r'(a)((?(1)b|c)x|(?(1)b|c)y|(?(1)b|c)z)', 'aby'))
+    assertTrue(re.match(r'\dx|\dy|\dz', '0y'))
+    assertTrue(re.match(r'ax|ay|az', 'ay'))
+    assertTrue(re.match(r'a+x|a+y|a+z', 'aay'))
+    assertTrue(re.match(r'(a)x|(a)y|(a)z', 'ay'))
+    assertTrue(re.match(r'(?>a)x|(?>a)y|(?>a)z', 'ay'))
+
 def test_no_fallback():
     assertRaises(lambda: re.FALLBACK)
     assertRaises(lambda: re.compile(r'(x)(?!y)'))
@@ -3719,49 +3736,55 @@ def test_no_fallback():
     assertEqual(repr(p), r"re.compile('x', re.IGNORECASE|0x200)")
 
 def test_cache():
-    p = r'([a-z])' * 10000
+    s = r'abc'
 
     re.purge()
-    assertGreater(measure(lambda: re.compile(p)), 0.1)
-    assertLess(measure(lambda: re.compile(p)), 0.001)
+    p = re.compile(s)
+    assertIs(p, re.compile(s))
+    assertIs(p, re.compile(p))
 
-    pat = re.compile(p)
-    assertLess(measure(lambda: re.compile(pat)), 0.001)
+    patI = re.compile(s, re.IGNORECASE)
+    assertIsNot(p, patI)
+    assertIs(patI, re.compile(s, re.IGNORECASE))
 
-    assertGreater(measure(lambda: re.compile(p, re.IGNORECASE)), 0.1)
-    assertLess(measure(lambda: re.compile(p, re.IGNORECASE)), 0.001)
+    patb = re.compile(bytes(s))
+    assertIsNot(p, patb)
+    assertIs(patb, re.compile(bytes(s)))
 
-    assertGreater(measure(lambda: re.compile(bytes(p))), 0.1)
-    assertLess(measure(lambda: re.compile(bytes(p))), 0.001)
-
-    assertLess(measure(lambda: re.compile(p)), 0.001)
+    assertIs(p, re.compile(s))
     re.purge()
-    assertGreater(measure(lambda: re.compile(p)), 0.1)
+    assertIsNot(p, re.compile(s))
 
     # no cache with DEBUG flag
     re.purge()
-    assertGreater(measure(lambda: get_debug_out(p)), 0.25)
-    assertGreater(measure(lambda: get_debug_out(p)), 0.25)
+
+    def compile_debug(p): # discard output
+        return capture_output(lambda: re.compile(p, re.DEBUG))[0]
+
+    p = compile_debug(s)
+    assertIsNot(p, re.compile(s))
+    assertIsNot(p, compile_debug(s))
 
 def test_max_cache_size():
-    p = r'([a-z])' * 10000
+    s = r'abc'
 
     re.purge()
-    assertGreater(measure(lambda: re.compile(p)), 0.1)
-    assertLess(measure(lambda: re.compile(p)), 0.001)
+    p = re.compile(s)
+    assertIs(p, re.compile(s))
 
     # add many patterns to overfill the cache
     for i in range(250):
         re.compile(str(i))
 
-    assertGreater(measure(lambda: re.compile(p)), 0.1)
+    assertIsNot(p, re.compile(s))
 
 def test_no_cache():
-    p = r'([a-z])' * 10000
+    s = r'abc'
 
-    assertGreater(measure(lambda: re.compile(p)), 0.1)
+    p = re.compile(s)
+    assertIsNot(p, re.compile(s))
     re.purge() # should have no effect
-    assertGreater(measure(lambda: re.compile(p)), 0.1)
+    assertIsNot(p, re.compile(s))
 
 
 # Run all tests:
@@ -3932,6 +3955,7 @@ if WITH_FALLBACK:
     test_ascii_same_subrange()
     test_ascii_overlapping()
     test_ascii_subrange_letters()
+    test_regex_node_equals()
 else:
     test_no_fallback()
 

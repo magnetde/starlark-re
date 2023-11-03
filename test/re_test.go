@@ -203,12 +203,13 @@ func captureOutput(thread *starlark.Thread, b *starlark.Builtin, args starlark.T
 		output.WriteByte('\n')
 	}
 
-	_, err := fn.CallInternal(thread, nil, nil)
+	res, err := fn.CallInternal(thread, nil, nil)
 	thread.Print = oldPrint
 
 	if err != nil {
 		return nil, err
 	}
 
-	return starlark.String(output.String()), nil
+	out := starlark.String(output.String())
+	return starlark.Tuple{res, out}, nil
 }
