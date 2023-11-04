@@ -1,7 +1,9 @@
-package re
+package regex
 
-// See https://github.com/justinmeza/lci/blob/main/unicode.c
-
+// unicodeNames is a sorted list of names for corresponding unicode code points.
+// The i-th name in "unicodeNames" corresponds to the i-th character in "unicodeCodepoints".
+// The character of a unicode name can be retrieved using the "lookupUnicodeName" function.
+// See also https://github.com/justinmeza/lci/blob/main/unicode.c
 var unicodeNames = [...]string{
 	"AC CURRENT",
 	"ACCOUNT OF",
@@ -21752,6 +21754,7 @@ var unicodeNames = [...]string{
 	"ZERO WIDTH SPACE",
 }
 
+// See the description of "unicodeNames".
 var unicodeCodepoints = [...]rune{
 	0x23E6,
 	0x2100,

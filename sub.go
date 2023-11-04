@@ -3,132 +3,154 @@ package re
 import (
 	"errors"
 	"fmt"
-	"regexp"
-	"strconv"
 	"strings"
 
 	"go.starlark.net/starlark"
+
+	"github.com/magnetde/starlark-re/regex"
 )
 
-type replacer interface {
+// matchReplacer is the common interface for match replacers,
+// whether they are a template of `str` / `bytes` or a replace function.
+type matchReplacer interface {
+
+	// withMatch should return true if the replace function requires a non-nil match parameter.
+	// It would lead to unnecessary overhead if the match was created but not used.
+	// At the moment the match parameter can only be nil if the template does not contain any references.
 	withMatch() bool
-	replace(m *Match) (string, error)
+
+	// replace replaces the match `m` by writing its substitution to `w`.
+	replace(w *strings.Builder, m *Match) error
 }
 
 // Replacer implementations
 
-// Replacer for templates.
-// If the replace string does not contain any references, the rule slice contains a single item,
-// representing a literal.
+// templateReplacer is the replacer for templates.
+// If the replace string did not contain any references, the slice of rules contains a single item,
+// representing a literal and the `match` member is set to false.
 type templateReplacer struct {
-	rules []templateRule
+	rules []regex.TemplateRule
 	match bool
 }
 
-type templateRule struct {
-	literal string
-	index   int // is -1 if template rule is literal
+// callableReplacer is the replacer for replace functions.
+type callableReplacer struct {
+	c      starlark.Callable
+	thread *starlark.Thread
+	p      *Pattern
 }
 
-// Replacer for functions
-type functionReplacer func(m *Match) (string, error)
-
-// Check if the types satiesfy the replacer interface.
+// Check if the types satisfy the replacer interface.
 var (
-	_ replacer = (*templateReplacer)(nil)
-	_ replacer = (*functionReplacer)(nil)
+	_ matchReplacer = (*templateReplacer)(nil)
+	_ matchReplacer = (*callableReplacer)(nil)
 )
 
+// withMatch returns true, if the template does not contain any references.
 func (r *templateReplacer) withMatch() bool {
 	return r.match
 }
 
-func (r *templateReplacer) replace(m *Match) (string, error) {
-	var b strings.Builder
-
+// replace replaces the current match.
+func (r *templateReplacer) replace(w *strings.Builder, m *Match) error {
 	for _, t := range r.rules {
-		if t.index < 0 {
-			b.WriteString(t.literal)
+		if t.IsLiteral() {
+			w.WriteString(t.Literal)
 		} else {
-			g := m.groups[t.index]
+			g := &m.groups[t.Group]
 			if !g.empty() {
-				b.WriteString(g.str)
+				w.WriteString(m.groupStr(g))
 			}
 		}
 	}
 
-	return b.String(), nil
+	return nil
 }
 
-func (r functionReplacer) withMatch() bool {
+// withMatch always returns true.
+func (r *callableReplacer) withMatch() bool {
 	return true
 }
 
-func (r functionReplacer) replace(m *Match) (string, error) {
-	return r(m)
+// replace replaces the current match by calling the replacer function.
+func (r *callableReplacer) replace(w *strings.Builder, m *Match) error {
+	raw, err := r.c.CallInternal(r.thread, starlark.Tuple{m}, nil)
+	if err != nil {
+		return err
+	}
+
+	// check if the result is str or bytes
+	var res strOrBytes
+	err = res.Unpack(raw)
+	if err != nil {
+		return err
+	}
+
+	// check if the result matches the expected type
+	err = r.p.pattern.sameType(res)
+	if err != nil {
+		return err
+	}
+
+	w.WriteString(res.value)
+
+	return nil
 }
 
-func getReplacer(thread *starlark.Thread, p *Pattern, r starlark.Value) (replacer, error) {
-	switch t := r.(type) {
+// buildReplacer creates a new match replacer based on the input parameter type.
+// If the parameter is of type `str` or `bytes`, a template replacer is created.
+// If the parameter is callable, a function replacer is returned instead.
+func buildReplacer(thread *starlark.Thread, p *Pattern, r starlark.Value) (matchReplacer, error) {
+	switch r := r.(type) {
 	case starlark.String:
 		if !p.pattern.isString {
 			return nil, errors.New("got str, want bytes")
 		}
 
-		return newTemplateReplacer(p.re, string(t), true /* is string */)
+		return newTemplateReplacer(p.re, string(r), true /* is string */)
 	case starlark.Bytes:
 		if p.pattern.isString {
 			return nil, errors.New("got bytes, want str")
 		}
 
-		return newTemplateReplacer(p.re, string(t), false /* is not string */)
+		return newTemplateReplacer(p.re, string(r), false /* is not string */)
 	case starlark.Callable:
-		fn := func(m *Match) (string, error) {
-			raw, err := t.CallInternal(thread, starlark.Tuple{m}, nil)
-			if err != nil {
-				return "", err
-			}
-
-			// check if result is str or bytes
-			var res strOrBytes
-			err = res.Unpack(raw)
-			if err != nil {
-				return "", err
-			}
-
-			err = p.pattern.sameType(res)
-			if err != nil {
-				return "", err
-			}
-
-			return res.value, nil
+		c := callableReplacer{
+			c:      r,
+			thread: thread,
+			p:      p,
 		}
 
-		return functionReplacer(fn), nil
+		return &c, nil
 	default:
-		return nil, fmt.Errorf("got %s, want str, bytes or function", r.Type())
+		return nil, fmt.Errorf("got %s, want %s or function", r.Type(), p.pattern.typeString())
 	}
 }
 
-// if returned slice empty: contains no backreferences and is just a literal
-func newTemplateReplacer(r *regexp.Regexp, repl string, isString bool) (replacer, error) {
-	var rules []templateRule
+// newTemplateReplacer creates a new template replacer for a template.
+// If the template does not contain any backslashes, it does need to be parsed.
+// Otherwise, the template must be parsed and transformed into a slice of template rules.
+func newTemplateReplacer(r regex.Engine, repl string, isString bool) (matchReplacer, error) {
+	var rules []regex.TemplateRule
 	withMatch := false
 
-	if !strings.ContainsRune(repl, '\\') { // check, if the template should be parsed
-		rules = []templateRule{{
-			literal: repl,
-			index:   -1,
+	if !strings.ContainsRune(repl, '\\') { // check, if the template needs to be parsed
+		rules = []regex.TemplateRule{{
+			Literal: repl,
+			Group:   -1,
 		}}
 	} else {
 		var err error
 
-		rules, err = parseTemplate(r, repl, isString)
+		rules, err = regex.ParseTemplate(r, repl, isString)
 		if err != nil {
 			return nil, err
 		}
 
-		withMatch = true
+		// `rules` is an slice with literals and group references, having at least one element.
+		// If there are at least two elements or the only element is a group reference,
+		// the slice contains group references because no two literals appear next to each other,.
+		withMatch = len(rules) >= 2 || !rules[0].IsLiteral()
 	}
 
 	tr := &templateReplacer{
@@ -139,200 +161,46 @@ func newTemplateReplacer(r *regexp.Regexp, repl string, isString bool) (replacer
 	return tr, nil
 }
 
-func parseTemplate(r *regexp.Regexp, template string, isString bool) ([]templateRule, error) {
-	var rules []templateRule
-
-	addLiteral := func(s string) {
-		if s != "" {
-			if len(rules) > 0 {
-				lastRule := &rules[len(rules)-1]
-
-				if lastRule.index < 0 { // if last rule is also a literal, then concat the strings
-					lastRule.literal += s
-					return
-				}
-			}
-
-			rules = append(rules, templateRule{literal: s, index: -1})
-		}
-	}
-
-	addIndex := func(i int) {
-		rules = append(rules, templateRule{index: i})
-	}
-
-	for len(template) > 0 {
-		before, rest, ok := strings.Cut(template, `\`)
-		if !ok {
-			break
-		}
-
-		addLiteral(before)
-
-		template = rest
-
-		if template == "" {
-			return nil, errors.New("bad escape (end of pattern)")
-		}
-
-		c := template[0]
-
-		template = template[1:]
-
-		switch c {
-		case 'g': // group found
-			index, rest, err := extractGroup(r, template, isString)
-			if err != nil {
-				return nil, err
-			}
-
-			template = rest
-
-			addIndex(index)
-		case '0': // octal string
-			chr := 0
-
-			if len(template) > 0 && isOctDigit(template[0]) {
-				chr = digit(template[0])
-
-				if len(template) > 1 && isOctDigit(template[1]) {
-					chr = 8*chr + digit(template[1])
-					template = template[2:]
-				} else {
-					template = template[1:]
-				}
-			}
-
-			addLiteral(string(rune(chr)))
-		case '1', '2', '3', '4', '5', '6', '7', '8', '9': // index or octal string
-			index := digit(c)
-
-			if len(template) > 0 && isDigit(template[0]) {
-				if isOctDigit(c) && isOctDigit(template[0]) &&
-					len(template) > 1 && isOctDigit(template[1]) {
-
-					index = 8*(8*index+digit(template[0])) + digit(template[1])
-					if index > 0o377 {
-						return nil, fmt.Errorf(`octal escape value \%s outside of range 0-0o377`, string(c)+template[:2])
-					}
-
-					template = template[2:]
-
-					addLiteral(string(rune(index)))
-					break // break out of case
-				}
-
-				index = 10*index + digit(template[0])
-				template = template[1:]
-			}
-
-			// not octal
-			if index > r.NumSubexp() {
-				return nil, fmt.Errorf("invalid group reference %d", index)
-			}
-
-			addIndex(index)
-		default:
-			if escape, ok := unescapeLetter(c); ok {
-				addLiteral(escape)
-			} else {
-				if isASCIILetter(c) {
-					return nil, fmt.Errorf("bad escape \\%c", c)
-				}
-
-				addLiteral(`\`)
-				addLiteral(string(c))
-			}
-		}
-	}
-
-	addLiteral(template)
-
-	return rules, nil
-}
-
-func extractGroup(r *regexp.Regexp, template string, isString bool) (index int, rest string, err error) {
-	if template == "" || template[0] != '<' {
-		err = errors.New("missing <")
-		return
-	}
-
-	name, rest, ok := strings.Cut(template[1:], ">")
-
-	if name == "" { // check first, if the name is empty to match Python errors
-		err = errors.New("missing group name")
-		return
-	}
-
-	if !ok {
-		err = errors.New("missing >, unterminated name")
-		return
-	}
-
-	uindex, intErr := strconv.ParseUint(name, 10, 0)
-	if intErr != nil {
-		if !isIdentifier(name) {
-			err = fmt.Errorf("bad character in group name %s", quoteString(name, isString, false))
-			return
-		}
-
-		index = r.SubexpIndex(name)
-		if index < 0 {
-			err = fmt.Errorf("unknown group name '%s'", name)
-			return
-		}
-	} else {
-		index = int(uindex)
-		if index > r.NumSubexp() {
-			err = fmt.Errorf("invalid group reference %d", index)
-			return
-		}
-	}
-
-	return
-}
-
-func sub(p *Pattern, r replacer, str strOrBytes, count int, subn bool) (starlark.Value, error) {
+// sub replaces all matches of the pattern `p` in `str` with the replacement `r`.
+// At most `count` matches will be replaced. If `subn` is true, then the number of replacements is also returned.
+func sub(p *Pattern, r matchReplacer, str strOrBytes, count int, subn bool) (starlark.Value, error) {
 	s := str.value
 
-	var replaced strings.Builder
-	var err error
+	var b strings.Builder
 
 	matches := 0
 	beg := 0
 	end := 0
 
-	findMatches(p.re, s, 0, count, func(match []int) bool {
+	err := findMatches(p.re, s, 0, len(s), count, func(match []int) error {
 		end = match[0]
 
-		replaced.WriteString(s[beg:end])
+		b.WriteString(s[beg:end])
 
 		var m *Match
 		if r.withMatch() {
 			m = newMatch(p, str, match, 0, len(str.value))
 		}
 
-		r, er := r.replace(m) // assign the outer error
-		if er != nil {
-			err = er
-			return false
+		err := r.replace(&b, m) // assign the outer error
+		if err != nil {
+			return err
 		}
 
-		replaced.WriteString(r)
 		matches++
 
 		beg = match[1]
-		return true
+		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	if end != len(s) {
-		replaced.WriteString(s[beg:])
+		b.WriteString(s[beg:])
 	}
 
-	res := p.pattern.asType(replaced.String())
+	res := p.pattern.asType(b.String())
 
 	if subn {
 		subs := starlark.MakeInt(matches)

@@ -2,7 +2,8 @@ package re
 
 import "go.starlark.net/starlark"
 
-func split(p *Pattern, str strOrBytes, maxSplit int) *starlark.List {
+// split splits `str` at all occurrences of pattern `p`. See also `reSplit`.
+func split(p *Pattern, str strOrBytes, maxSplit int) (*starlark.List, error) {
 	s := str.value
 
 	var list []starlark.Value
@@ -10,7 +11,7 @@ func split(p *Pattern, str strOrBytes, maxSplit int) *starlark.List {
 	beg := 0
 	end := 0
 
-	findMatches(p.re, s, 0, maxSplit, func(match []int) bool {
+	err := findMatches(p.re, s, 0, len(s), maxSplit, func(match []int) error {
 		end = match[0]
 
 		list = append(list, p.pattern.asType(s[beg:end]))
@@ -29,11 +30,14 @@ func split(p *Pattern, str strOrBytes, maxSplit int) *starlark.List {
 		}
 
 		beg = match[1]
-		return true
+		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	// Append even if empty
 	list = append(list, p.pattern.asType(s[beg:]))
 
-	return starlark.NewList(list)
+	return starlark.NewList(list), nil
 }
