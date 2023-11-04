@@ -35,6 +35,11 @@ func (b *BitArray) ensureCap(n uint) {
 	}
 }
 
+// divup performs the integer division (a / b) and rounds up the result.
+func divup(a, b uint) uint {
+	return (a + b - 1) / b
+}
+
 // Append appends a bit with a value of `v` to the bitarray.
 func (b *BitArray) Append(v bool) {
 	b.ensureCap(b.len + 1)
@@ -103,11 +108,6 @@ func (b *BitArray) Optimize() {
 	b.factor = factor
 	b.s = s
 	b.rs = rs
-}
-
-// divup performs the integer division (a / b) and rounds up the result.
-func divup(a, b uint) uint {
-	return (a + b - 1) / b
 }
 
 // popcnt returns the number of 1-bits in `v`.
