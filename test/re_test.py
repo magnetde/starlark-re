@@ -1591,8 +1591,8 @@ def test_ignore_case():
 
     # Two different characters have the same multicharacter uppercase.
     # assert '\ufb05'.upper() == '\ufb06'.upper() == 'ST' # 'ﬅ', 'ﬆ'
-    # SKIP in Go: assertTrue(re.match(r'\ufb05', '\ufb06', re.I))
-    # SKIP in Go: assertTrue(re.match(r'\ufb06', '\ufb05', re.I))
+    assertTrue(re.match(r'\ufb05', '\ufb06', re.I))
+    assertTrue(re.match(r'\ufb06', '\ufb05', re.I))
 
 def test_ignore_case_set():
     assertTrue(re.match(r'[19A]', 'A', re.I))
@@ -1629,8 +1629,8 @@ def test_ignore_case_set():
 
     # Two different characters have the same multicharacter uppercase.
     # assert '\ufb05'.upper() == '\ufb06'.upper() == 'ST' # 'ﬅ', 'ﬆ'
-    # SKIP in Go: assertTrue(re.match(r'[19\ufb05]', '\ufb06', re.I))
-    # SKIP in Go: assertTrue(re.match(r'[19\ufb06]', '\ufb05', re.I))
+    assertTrue(re.match(r'[19\ufb05]', '\ufb06', re.I))
+    assertTrue(re.match(r'[19\ufb06]', '\ufb05', re.I))
 
 def test_ignore_case_range():
     # Issues #3511, #17381.
@@ -1676,8 +1676,8 @@ def test_ignore_case_range():
 
     # Two different characters have the same multicharacter uppercase.
     # assert '\ufb05'.upper() == '\ufb06'.upper() == 'ST' # 'ﬅ', 'ﬆ'
-    # SKIP in Go: assertTrue(re.match(r'[\ufb04-\ufb05]', '\ufb06', re.I))
-    # SKIP in Go: assertTrue(re.match(r'[\ufb06-\ufb07]', '\ufb05', re.I))
+    assertTrue(re.match(r'[\ufb04-\ufb05]', '\ufb06', re.I))
+    assertTrue(re.match(r'[\ufb06-\ufb07]', '\ufb05', re.I))
 
 def test_category():
     assertEqual(re.match(r"(\s)", " ").group(1), " ")
@@ -3480,8 +3480,8 @@ def test_ignore_case_fallback():
 
     # Two different characters have the same multicharacter uppercase.
     # assert '\ufb05'.upper() == '\ufb06'.upper() == 'ST' # 'ﬅ', 'ﬆ'
-    # SKIP in Go: assertTrue(re.match(r'\ufb05', '\ufb06', re.I | re.FALLBACK))
-    # SKIP in Go: assertTrue(re.match(r'\ufb06', '\ufb05', re.I | re.FALLBACK))
+    assertTrue(re.match(r'\ufb05', '\ufb06', re.I | re.FALLBACK))
+    assertTrue(re.match(r'\ufb06', '\ufb05', re.I | re.FALLBACK))
 
 def test_ignore_case_set_fallback():
     assertTrue(re.match(r'[19A]', 'A', re.I | re.FALLBACK))
@@ -3518,8 +3518,8 @@ def test_ignore_case_set_fallback():
 
     # Two different characters have the same multicharacter uppercase.
     # assert '\ufb05'.upper() == '\ufb06'.upper() == 'ST' # 'ﬅ', 'ﬆ'
-    # SKIP in Go: assertTrue(re.match(r'[19\ufb05]', '\ufb06', re.I | re.FALLBACK))
-    # SKIP in Go: assertTrue(re.match(r'[19\ufb06]', '\ufb05', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[19\ufb05]', '\ufb06', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[19\ufb06]', '\ufb05', re.I | re.FALLBACK))
 
 def test_ignore_case_range_fallback():
     # Issues #3511, #17381.
@@ -3565,8 +3565,8 @@ def test_ignore_case_range_fallback():
 
     # Two different characters have the same multicharacter uppercase.
     # assert '\ufb05'.upper() == '\ufb06'.upper() == 'ST' # 'ﬅ', 'ﬆ'
-    # SKIP in Go: assertTrue(re.match(r'[\ufb04-\ufb05]', '\ufb06', re.I | re.FALLBACK))
-    # SKIP in Go: assertTrue(re.match(r'[\ufb06-\ufb07]', '\ufb05', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[\ufb04-\ufb05]', '\ufb06', re.I | re.FALLBACK))
+    assertTrue(re.match(r'[\ufb06-\ufb07]', '\ufb05', re.I | re.FALLBACK))
 
 def test_unicode_categories():
     for flag in (0, re.FALLBACK):

@@ -332,7 +332,7 @@ func writeRanges(w *subPatternWriter, r []rune) {
 // needsFoldedLiteral reports, whether the preprocessor needs to handle the case folding of character `c`.
 func needsFoldedLiteral(c rune) bool {
 	switch c {
-	case 'I', 'i', '\u0130', '\u0131':
+	case 'I', 'i', '\u0130', '\u0131', '\ufb05', '\ufb06':
 		return true
 	default:
 		return false
@@ -341,19 +341,21 @@ func needsFoldedLiteral(c rune) bool {
 
 // needsFoldedRange reports, whether the preprocessor needs to handle the case folding of range `[lo-hi]`.
 func needsFoldedRange(lo, hi rune) bool {
-	if lo <= 'I' && 'I' <= hi {
+	if inRange(lo, hi, 'I') || inRange(lo, hi, 'i') {
 		return true
 	}
-	if lo <= 'i' && 'i' <= hi {
+	if inRange(lo, hi, '\u0130') || inRange(lo, hi, '\u0131') {
 		return true
 	}
-	if lo <= '\u0130' && '\u0130' <= hi {
-		return true
-	}
-	if lo <= '\u0131' && '\u0131' <= hi {
+	if inRange(lo, hi, '\ufb05') || inRange(lo, hi, '\ufb06') {
 		return true
 	}
 	return false
+}
+
+// inRange reports whether `c“ is in the range `[lo-hi]`.
+func inRange(lo, hi, c rune) bool {
+	return lo <= c && c <= hi
 }
 
 // createFoldedRanges creates a slice of ranges, which contains all cases of the characters from `lo` to `hi`.
@@ -411,7 +413,8 @@ func createFoldedRanges(lo, hi rune, ascii bool) []rune {
 }
 
 // simpleFold is the equivalent function of `unicode.SimpleFold`
-// with support for 'U+0130' and 'U+0131' for 'I' and 'i'.
+// with support for 'U+0130' and 'U+0131' for 'I' and 'i'
+// and for 'U+FB05' and 'U+FB06'
 func simpleFold(c rune) rune {
 	switch c {
 	case 'I':
@@ -422,6 +425,10 @@ func simpleFold(c rune) rune {
 		return '\u0131'
 	case '\u0131':
 		return 'I'
+	case '\ufb05':
+		return '\ufb06'
+	case '\ufb06':
+		return '\ufb05'
 	default:
 		return unicode.SimpleFold(c)
 	}
@@ -429,9 +436,9 @@ func simpleFold(c rune) rune {
 
 // simpleFoldASCII is the equivalent function of `unicode.SimpleFold` limited to ASCII characters.
 func simpleFoldASCII(c rune) rune {
-	if 'A' <= c && c <= 'Z' {
+	if inRange('A', 'Z', c) {
 		return c - 'A' + 'a'
-	} else if 'a' <= c && c <= 'z' {
+	} else if inRange('a', 'z', c) {
 		return c - 'a' + 'A'
 	} else {
 		return c
