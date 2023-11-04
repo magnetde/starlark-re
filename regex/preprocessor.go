@@ -105,7 +105,7 @@ func (p *preprocessor) stdPattern() string {
 
 // writeFlags writes a group of global regex flags into a string builder.
 // If the `std` parameter is true, then the current regex pattern should be
-// compatible with the standard regex engine. If this is not the case or if
+// compatible with the default regex engine. If this is not the case or if
 // the current regex should only ignore cases for ASCII characters, then the
 // preprocessor will do the case ignoring.
 func (p *preprocessor) writeFlags(w *strings.Builder, std bool) {
@@ -242,8 +242,8 @@ func (p *preprocessor) defaultReplacer(w *subPatternWriter, n *regexNode, ctx *s
 
 		// If the IGNORECASE flag is set, the preprocessor needs to handle case ignoring in many cases to match
 		// the behavior from Python. The preprocessor always needs to handle case ignoring for the fallback
-		// engine since it compares characters differently compared to the standard engine (and also to Python).
-		// For the standard engine, it is only necessary if the ASCII mode is also enabled, or the literal is a
+		// engine since it compares characters differently compared to the default engine (and also to Python).
+		// For the default engine, it is only necessary if the ASCII mode is also enabled, or the literal is a
 		// folded character of 'i'.
 
 		// Check, if the literal does not need to be folded by the preprocessor.
