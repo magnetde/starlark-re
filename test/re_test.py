@@ -3727,19 +3727,23 @@ def test_regex_node_equals():
 
 def test_ascii_cases():
     for flag in (0, re.FALLBACK):
-        for pattern in ['[a-z]', '[A-Z]', 'K', 'k']:
-            p = re.compile(pattern, re.IGNORECASE | flag)
-            for s in ['K', 'k', '\u212A']:
-                assertTrue(p.match(s))
+        ranges = ['[a-z]', '[A-Z]']
+        literals = {
+            'K': ['K', 'k', '\u212A'],
+            'I': ['I', 'i', '\u0130', '\u0131'],
+            'S': ['S', 's', '\u017F'],
+        }
 
-        for pattern in ['[a-z]', '[A-Z]', 'I', 'i']:
-            p = re.compile(pattern, re.IGNORECASE | flag)
-            for s in ['I', 'i', '\u0130', '\u0131']:
-                assertTrue(p.match(s))
+        for lit in literals.values():
+            for pattern in ranges + lit:
+                p = re.compile(pattern, re.IGNORECASE | flag)
+                for s in lit:
+                    assertTrue(p.match(s))
 
-        for pattern in ['[a-z]', '[A-Z]', 'S', 's']:
+        # Special case
+        for pattern in [r'[\u0130-\u0131]', r'[\u0131-\u0132]']:
             p = re.compile(pattern, re.IGNORECASE | flag)
-            for s in ['S', 's', '\u017F']:
+            for s in literals['I']:
                 assertTrue(p.match(s))
 
 def test_special_pos():
