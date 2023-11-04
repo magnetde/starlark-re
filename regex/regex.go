@@ -11,6 +11,8 @@ import (
 	"unsafe"
 
 	"github.com/dlclark/regexp2"
+
+	"github.com/magnetde/starlark-re/util"
 )
 
 // Engine is a wrapper type for the regex engine.
@@ -152,9 +154,9 @@ type stdRegex struct {
 
 // stdInput is the type, that represents the processed input of `stdRegex`.
 type stdInput struct {
-	re      *stdRegex
-	str     string
-	offsets []int
+	re   *stdRegex
+	str  string
+	bits *util.BitArray
 }
 
 // fallbEngine is the type, that represents the regex engine `regexp.Regexp2`.
@@ -168,10 +170,9 @@ type fallbEngine struct {
 
 // fallbInput is the type, that represents the processed input of `fallbEngine`.
 type fallbInput struct {
-	re          *fallbEngine
-	chars       []rune
-	offsetsRune []int // offsets for converting byte indices to rune indices
-	offsetsByte []int // offsets for converting rune indices to byte indices
+	re    *fallbEngine
+	chars []rune
+	bits  *util.BitArray
 }
 
 // Check if the types satisfy the interfaces.
@@ -209,12 +210,12 @@ func (r *stdRegex) SupportsLongest() bool {
 
 // BuildInput is the implementation of the `BuildInput` function for the `Engine` interface.
 func (r *stdRegex) BuildInput(s string, endpos int) Input {
-	s, offsets := r.replaceInvalidChars(s, endpos)
+	s, bits := r.replaceInvalidChars(s, endpos)
 
 	i := &stdInput{
-		re:      r,
-		str:     s,
-		offsets: offsets,
+		re:   r,
+		str:  s,
+		bits: bits,
 	}
 
 	return i
@@ -224,53 +225,62 @@ func (r *stdRegex) BuildInput(s string, endpos int) Input {
 // This is necessary because the Go regex engine requires valid UTF-8 codepoints instead of
 // arbitrary bytes, even if a bytes value is passed to the `doExecute` function instead of a string.
 // If the string does not contain any invalid illegal UTF-8 codepoints,
-// it is returned without modification, and no offset slice is returned.
+// it is returned without modification, and no bitarray is returned.
 // A maximum of `endpos` bytes are extracted from `s`.
-func (r *stdRegex) replaceInvalidChars(s string, endpos int) (string, []int) {
+//
+// If a bitarray is returned, it contains the original bytes of `s` in the returned string (`s'`).
+// If the i-th bit is a 1-bit, then the i-th byte in the string `s'` is also present in the string
+// `s` but may be at a different position since other bytes may have been added to the string.
+// If the i-th bit is a 0-bit, then the i-th byte in the string `s'` is one of these additional
+// bytes that where added to fix invalid UTF-8 codepoints.
+//
+// A byte position `i` in `s` is converted to a byte position `j` in `s'` using the bitarray `B` as follows:
+//   - `j` is the position of the `i+1`-th 1-bit in `B`; determined with `select(B, i + 1)`
+//   - `i` is the number of 1-bits from 0 to `j-1`; determined with `rank(B, j - 1)`
+func (r *stdRegex) replaceInvalidChars(s string, endpos int) (string, *util.BitArray) {
+	pre := s[:endpos]
+
 	if r.isStr {
-		if utf8.ValidString(s) { // skip if no invalid utf8 values exist
-			return s[:endpos], nil
+		if utf8.ValidString(pre) { // skip if no invalid utf8 values exist until endpos
+			return pre, nil
 		}
 	} else {
-		if isASCIIString(s) { // skip if only ascii characters exist
-			return s[:endpos], nil
+		if isASCIIString(pre) { // skip if only ascii characters exist until endpos
+			return pre, nil
 		}
 	}
 
 	var b strings.Builder
 	b.Grow(endpos + 4) // reserve 4 extra bytes
 
-	offsets := make([]int, 0, endpos+1+4) // reserve 4 extra offsets (+1 for the last offset)
-	offset := 0
+	var bits util.BitArray
+	bits.Grow(endpos + 4 + 1) // reserve 4 extra bits (+1 for the last offset)
 
 	if r.isStr {
-		bytes := 0
+		pos := 0
 
 		for len(s) > 0 {
 			// Get the next UTF-8 codepoint
 			c, size := utf8.DecodeRuneInString(s)
 
-			bytes += size
-			if bytes > endpos {
+			pos += size
+			if pos > endpos {
 				break
 			}
 
 			if c != utf8.RuneError {
 				b.WriteRune(c)
 
-				for i := 0; i < size; i++ {
-					offsets = append(offsets, offset)
-				}
+				bits.AppendN(true, size)
 			} else {
 				b.WriteRune(rune(s[0]))
 
 				// At this point, if `s[0]` is in range 128-255,
 				// then `t` is in either of the format '\xc2\x..' or '\xc3\x..'.
-				// So, two offsets should be added to the offset slice.
-				// As an additional element has been appended to the string,
-				// which previously did not exist, so the second offset must be decreased accordingly.
-				offsets = append(offsets, offset, offset-1)
-				offset--
+				// So an additional element has been appended to the string,
+				// which previously did not exist, and a 0-bit has to be added to the bitarray.
+				bits.Append(true)
+				bits.Append(false)
 			}
 
 			// If the character is not valid, the size returned is 1, so slicing with `size` is corrent.
@@ -283,22 +293,22 @@ func (r *stdRegex) replaceInvalidChars(s string, endpos int) (string, []int) {
 			if c <= unicode.MaxASCII {
 				b.WriteByte(c)
 
-				// Do not increase the offset for ASCII characters.
-				offsets = append(offsets, offset)
+				bits.Append(true)
 			} else {
 				b.WriteRune(rune(c))
 
 				// See the comment above for invalid characters in strings.
-				offsets = append(offsets, offset, offset-1)
-				offset--
+				bits.Append(true)
+				bits.Append(false)
 			}
 		}
 	}
 
-	// Append a last offset value, that corresponds to `endpos`.
-	offsets = append(offsets, offset)
+	// Append a last 1-bit, that corresponds to `endpos`.
+	bits.Append(true)
+	bits.Optimize(0)
 
-	return b.String(), offsets
+	return b.String(), &bits
 }
 
 //go:linkname doExecute regexp.(*Regexp).doExecute
@@ -312,39 +322,26 @@ func (i *stdInput) Find(pos int, longest bool, dstCap []int) ([]int, error) {
 		re.Longest()
 	}
 
-	a := i.pad(doExecute(re, nil, nil, i.str, pos, i.re.numCap, dstCap))
+	if i.bits != nil {
+		pos = i.bits.Select(pos + 1)
+	}
 
-	applyOffsets(a, i.offsets)
+	a := doExecute(re, nil, nil, i.str, pos, i.re.numCap, dstCap)
+
+	applyBitsRank(a, i.bits)
 	return a, nil
 }
 
-// pads appends -1 values to a, until it reaches the size 2*(1+n),
-// where n is the number of capture group in the regex pattern.
-func (i *stdInput) pad(a []int) []int {
-	if a == nil {
-		// No match.
-		return nil
-	}
-
-	n := 2 * (1 + i.re.SubexpCount())
-	for len(a) < n {
-		a = append(a, -1)
-	}
-
-	return a
-}
-
-// applyOffsets applies the offset in `offset` to the slice `a` containing positions.
-// Each value `a[i]` is updated as follows:
-// (a) If `a[i]` is non-negative, then the offset `offsets[a[i]]` is added to `a[i]`.
-// (b) If `a[i]` is negative, it remains unchanged.
-func applyOffsets(a []int, offsets []int) {
-	if a == nil || offsets == nil {
+// applyBitsRank modifies the positions in `a` by applying `rank(a[i] - 1)` to each position.
+// If `a[i]` is negative, it remains unchanged.
+// If `a` or `bits` is `nil`, this function is a noop.
+func applyBitsRank(a []int, bits *util.BitArray) {
+	if a == nil || bits == nil {
 		return
 	}
 	for i, v := range a {
 		if v >= 0 {
-			a[i] = v + offsets[v]
+			a[i] = bits.Rank(v - 1)
 		}
 	}
 }
@@ -386,80 +383,81 @@ func (r *fallbEngine) SupportsLongest() bool {
 
 // BuildInput is the implementation of the `BuildInput` function for the `Engine` interface.
 func (r *fallbEngine) BuildInput(s string, endpos int) Input {
-	chars, offsetsRune, offsetsByte := r.getRuneOffsets(s, endpos)
+	chars, bits := r.getRuneOffsets(s, endpos)
 
 	return &fallbInput{
-		re:          r,
-		chars:       chars,
-		offsetsRune: offsetsRune,
-		offsetsByte: offsetsByte,
+		re:    r,
+		chars: chars,
+		bits:  bits,
 	}
 }
 
 // getRuneOffsets transforms the string into a slice of character to be compatible with the`regexp2.Regexp` regex engine.
 // Additionally, any invalid UTF-8 codepoints are replaced with valid ones.
-// Two offset slices are needed to be created for this engine; one to convert the byte positions
-// in the input string `s` to corresponding offsets in the modified character slice (of type `[]rune`),
-// and another one to convert the character positions in the modified character slice back to byte
-// positions in the original input string `s`.
+// In addition, a bitarray is needed to convert between byte positions in the input string `s` and corresponding indices
+// of characters in the modified character slice (of type `[]rune`).
 // If the string contains only ASCII characters, creating offset slices is not needed.
 // A maximum of `endpos` bytes are extracted from `s`.
-func (r *fallbEngine) getRuneOffsets(s string, endpos int) ([]rune, []int, []int) {
-	chars := make([]rune, 0, endpos)
-
+//
+// If a bitarray is returned, it contains the starting positions of the characters in `s`.
+// If the i-th bit is a 1-bit, then the i-th byte in the string `s` indicates the first byte of a character.
+// The succeeding 0-bits are the following bytes of the same character.
+//
+// A byte position `i` of a character in `s` is converted to its index `j` in the slice of runes using the bitarray `B` as follows:
+//   - `j` is the number if 1-bits from 0 to `i-1`; determined with `rank(B, i - 1)`
+//   - `i` is the position of the `j+1`-th 1-bit in `B`; determined with `select(B, j + 1)`
+func (r *fallbEngine) getRuneOffsets(s string, endpos int) ([]rune, *util.BitArray) {
 	if !r.isStr || isASCIIString(s) {
 		// For ascii strings and bytes, all bytes are converted to its rune value and positions will not change.
+
+		chars := make([]rune, endpos)
 		for i := 0; i < endpos; i++ {
-			chars = append(chars, rune(s[i]))
+			chars[i] = rune(s[i])
 		}
 
-		return chars, nil, nil
+		return chars, nil
 	}
 
-	offsetsRune := make([]int, 0, endpos+1)   // convert byte positions to character positions offsets
-	offsetsByte := make([]int, 0, endpos+1+4) // convert character positions to byte positions; reserve 4 extra offsets
-	offsetByte := 0                           // `offsetByte` is the current difference in positions between character and bytes
-	bytes := 0
+	guess := utf8.RuneCountInString(s[:endpos])
+	chars := make([]rune, 0, guess)
+
+	var bits util.BitArray
+	bits.Grow(endpos + 1) // +1 for the last bit representing `endpos`
+
+	pos := 0
 
 	for len(s) > 0 {
 		// Get the next UTF-8 codepoint
 		c, size := utf8.DecodeRuneInString(s)
 
-		bytes += size
-		if bytes > endpos {
+		pos += size
+		if pos > endpos {
 			break
 		}
 
-		incr := size
-
 		if c == utf8.RuneError {
 			c = rune(s[0])
-			incr = utf8.RuneLen(c)
 		}
 
 		chars = append(chars, c)
 
-		offsetsRune = append(offsetsRune, len(chars)-1)
-		for i := 1; i < size; i++ { // The following offsets belong to the next character.
-			offsetsRune = append(offsetsRune, len(chars))
-		}
-
-		offsetsByte = append(offsetsByte, offsetByte)
-		offsetByte += incr - 1
+		bits.Append(true)
+		bits.AppendN(false, size-1)
 
 		s = s[size:] // if the rune is not valid, the size returned is 1, so slicing with `size` is correct
 	}
 
 	// Append a last element, corresponding to `endpos`.
-	offsetsByte = append(offsetsByte, offsetByte)
+	bits.Append(true)
+	bits.Optimize(0)
 
-	return chars, offsetsRune, offsetsByte
+	return chars, &bits
 }
 
 // Find is the implementation of the `Find` function for the `Input` interface.
 func (i *fallbInput) Find(pos int, _ bool, dstCap []int) ([]int, error) {
-	if i.offsetsRune != nil {
-		pos = i.offsetsRune[pos]
+	if i.bits != nil {
+		pos = i.bits.Rank(pos - 1)
 	}
 
 	m, err := i.re.re.FindRunesMatchStartingAt(i.chars, pos)
@@ -488,7 +486,7 @@ func (i *fallbInput) Find(pos int, _ bool, dstCap []int) ([]int, error) {
 		a[2*index+1] = end
 	}
 
-	applyOffsets(a, i.offsetsByte)
+	applyBitsSelect(a, i.bits)
 	return a, nil
 }
 
@@ -513,4 +511,18 @@ func growSlice[S ~[]E, E any](s S, n int) S {
 		s[i] = zero
 	}
 	return s
+}
+
+// applyBitsRank modifies the positions in `a` by applying `select(a[i] + 1)` to each position.
+// If `a[i]` is negative, it remains unchanged.
+// If `a` or `bits` is `nil`, this function is a noop.
+func applyBitsSelect(a []int, bits *util.BitArray) {
+	if a == nil || bits == nil {
+		return
+	}
+	for i, v := range a {
+		if v >= 0 {
+			a[i] = bits.Select(v + 1)
+		}
+	}
 }

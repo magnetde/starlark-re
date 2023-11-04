@@ -3344,7 +3344,7 @@ def test_curly_braces():
     assertTrue(re.match(r'{0,1,0}', '{0,1,0}', re.FALLBACK))
 
     # extra test for coverage
-    assertRaises(lambda: re.compile(r'.{%d,%d}' % (0,1<<128)))
+    assertRaises(lambda: re.compile(r'.{%d,%d}' % (0, 1<<128)))
 
 def test_flag_errors():
     assertRaises(lambda: re.compile('.', re.LOCALE),
