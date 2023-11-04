@@ -3725,6 +3725,78 @@ def test_regex_node_equals():
     assertTrue(re.match(r'(a)x|(a)y|(a)z', 'ay'))
     assertTrue(re.match(r'(?>a)x|(?>a)y|(?>a)z', 'ay'))
 
+def test_span_ascii():
+    for flag in (0, re.FALLBACK):
+        p = re.compile(r'\w+', flag)
+        assertEqual(p.search('--x-').span(), (2, 3))
+        assertEqual(p.search('--x-', pos=2).span(), (2, 3))
+        assertEqual(p.search('--xx-', pos=2).span(), (2, 4))
+        assertEqual(p.search('--xx\x79-', pos=3).span(), (3, 5))
+
+        p = re.compile(b'\\w+', flag)
+        assertEqual(p.search(b'--x-').span(), (2, 3))
+        assertEqual(p.search(b'--x-', pos=2).span(), (2, 3))
+        assertEqual(p.search(b'--xx-', pos=2).span(), (2, 4))
+        assertEqual(p.search(b'--xx\x79-', pos=3).span(), (3, 5))
+        assertEqual(p.search(b'--xx\x79-', pos=3, endpos=4).span(), (3, 4))
+        assertEqual(p.search(b'--xx\x79-', pos=3, endpos=5).span(), (3, 5))
+
+def test_span_bytes_nonascii():
+    for flag in (0, re.FALLBACK):
+        p = re.compile(b'\\w+', flag)
+
+        assertEqual(p.search(b'--\x41\xc3--').span(), (2, 3))
+        assertEqual(p.search(b'--\x41\xc3--', pos=2).span(), (2, 3))
+        assertIsNone(p.search(b'--\x41\xc3--', pos=3))
+
+        assertEqual(p.search(b'--\x41\xc3\x41--', pos=2).span(), (2, 3))
+        assertEqual(p.search(b'--\x41\xc3\x41--', pos=3).span(), (4, 5))
+        assertEqual(p.search(b'--\x41\xc3\x41--', pos=4).span(), (4, 5))
+        assertIsNone(p.search(b'--\x41\xc3\x41--', pos=3, endpos=4))
+        assertIsNone(p.search(b'--\x41\xc3\x41--', pos=5))
+
+        assertEqual(p.search(b'\x41\xc3\xc3\x41\x41', pos=2).span(), (3, 5))
+        assertEqual(p.search(b'\x41\xc3\xc3\x41\x41', pos=2, endpos=4).span(), (3, 4))
+
+def test_span_unicode():
+    for flag in (0, re.FALLBACK):
+        p = re.compile(r'\w+', flag)
+
+        # unicode
+        assertEqual(p.search('--\u00DF--').span(), (2, 4))
+        assertEqual(p.search('--\u00DF--', pos=2).span(), (2, 4))
+        assertEqual(p.search('--\u00DF--', pos=2, endpos=4).span(), (2, 4))
+        assertEqual(p.search('--\u30C4--').span(), (2, 5))
+        assertIsNone(p.search('--\u00DF--', pos=4))
+
+        # multiple unicode characters
+        assertEqual(p.search('--\u00DF\u00DF--', pos=2).span(), (2, 6))
+        assertEqual(p.search('--\u00DF\u00DF--', pos=2, endpos=6).span(), (2, 6))
+        assertEqual(p.search('--\u00DF\u00DF--', pos=4, endpos=6).span(), (4, 6))
+        assertEqual(p.search('--\u00DF\u30C4\u00DF--', pos=4).span(), (4, 9))
+        assertEqual(p.search('--\u00DF\u30C4\u00DF--', pos=4, endpos=7).span(), (4, 7))
+
+        # not starting at full characters
+        assertIsNone(p.search('--\u00DF--', pos=3))
+        assertIsNone(p.search('--\u30C4--', pos=4))
+        assertEqual(p.search('--\u00DF\u30C4--', pos=3).span(), (4, 7))
+        assertEqual(p.search('--\u00DF\u30C4--', pos=4).span(), (4, 7))
+        assertIsNone(p.search('--\u00DF\u30C4--', pos=5))
+        assertEqual(p.search('--\u00DF\u30C4\u00DF--', pos=3).span(), (4, 9))
+        assertEqual(p.search('--\u00DF\u30C4\u00DF--', pos=4).span(), (4, 9))
+
+        # not ending at full characters
+        assertEqual(p.search('--\u00DF\u30C4\u00DF--', pos=3, endpos=9).span(), (4, 9))
+        assertEqual(p.search('--\u00DF\u30C4\u00DF--', pos=5, endpos=9).span(), (7, 9))
+        assertEqual(p.search('--\u00DF\u30C4\u00DF--', pos=6, endpos=9).span(), (7, 9))
+        assertEqual(p.search('--\u00DF\u30C4\u00DF--', pos=3, endpos=8).span(), (4, 7))
+        assertEqual(p.search('--\u00DF\u30C4\u00DF--', pos=4, endpos=8).span(), (4, 7))
+        assertEqual(p.search('--\u00DF\u30C4\u00DF--', pos=4, endpos=7).span(), (4, 7))
+        assertEqual(p.search('--\u00DF\u30C4\u00DF--', pos=4, endpos=7).span(), (4, 7))
+        assertIsNone(p.search('--\u00DF\u30C4\u00DF--', pos=4, endpos=6))
+        assertIsNone(p.search('--\u00DF\u30C4\u00DF--', pos=5, endpos=6))
+        assertIsNone(p.search('--\u00DF\u30C4\u00DF--', pos=6, endpos=7))
+
 def test_no_fallback():
     assertRaises(lambda: re.FALLBACK)
     assertRaises(lambda: re.compile(r'(x)(?!y)'))
@@ -3956,6 +4028,9 @@ if WITH_FALLBACK:
     test_ascii_overlapping()
     test_ascii_subrange_letters()
     test_regex_node_equals()
+    test_span_ascii()
+    test_span_bytes_nonascii()
+    test_span_unicode()
 else:
     test_no_fallback()
 

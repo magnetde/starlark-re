@@ -306,7 +306,7 @@ func (r *stdRegex) replaceInvalidChars(s string, endpos int) (string, *util.BitA
 
 	// Append a last 1-bit, that corresponds to `endpos`.
 	bits.Append(true)
-	bits.Optimize(0)
+	bits.Optimize()
 
 	return b.String(), &bits
 }
@@ -449,7 +449,7 @@ func (r *fallbEngine) getRuneOffsets(s string, endpos int) ([]rune, *util.BitArr
 
 	// Append a last element, corresponding to `endpos`.
 	bits.Append(true)
-	bits.Optimize(0)
+	bits.Optimize()
 
 	return chars, &bits
 }
