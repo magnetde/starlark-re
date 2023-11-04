@@ -3754,6 +3754,8 @@ def test_special_pos():
         assertIsNone(p.search('abcd', pos=2, endpos=2))
         assertIsNone(p.search('abcd', pos=2, endpos=1))
         assertIsNone(p.search('abcd', pos=3, endpos=1))
+        assertTrue(p.search('abcd', pos=-1))
+        assertIsNone(p.search('abcd', pos=2, endpos=-1))
 
         # the character gets removed, because pos and endpos are inside of its utf8 representation
         assertTrue(p.search('-\u30C4-', pos=1))

@@ -288,7 +288,11 @@ func (m *Module) purge() {
 		defer m.mu.Unlock()
 
 		m.list.Init()
-		clear(m.cache)
+
+		// clear(m.cache)
+		for k := range m.cache {
+			delete(m.cache, k)
+		}
 	}
 }
 
@@ -493,7 +497,12 @@ func checkParams(p *Pattern, str strOrBytes, pos, endpos *int) error {
 
 // clamp limits `pos` between 0 and `length`.
 func clamp(pos, length int) int {
-	return min(max(pos, 0), length)
+	if pos < 0 {
+		pos = 0
+	} else if pos > length {
+		pos = length
+	}
+	return pos
 }
 
 // reMatch scan through string looking for the first location where the regex pattern produces a match,

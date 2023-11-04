@@ -93,6 +93,7 @@ func (b *BitArray) Optimize() {
 
 	const factor = uint(defaultFactor)
 
+	n := uint(len(b.data))
 	s := blockw * factor
 	numSBlock := divup(b.len, s)
 
@@ -100,7 +101,10 @@ func (b *BitArray) Optimize() {
 
 	for i := uint(1); i < numSBlock; i++ {
 		start := (i - 1) * factor
-		end := min(start+factor, uint(len(b.data)))
+		end := start + factor
+		if end > n {
+			end = n
+		}
 
 		rs[i] = rs[i-1] + popcnt(b.data[start:end])
 	}

@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 )
 
 // subPattern is a type, that represents a regex subpattern.
@@ -584,21 +583,18 @@ func (w *subPatternWriter) writeLiteral(c rune) {
 	} else {
 		w.writeByte('{')
 
-		switch max(utf8.RuneLen(c), 2) {
-		default:
-			w.writeByte(hexDigits[(c>>28)&0xf])
-			w.writeByte(hexDigits[(c>>24)&0xf])
-			fallthrough
-		case 3:
+		if c >= 0x10000 {
+			if c >= 0x1000000 {
+				w.writeByte(hexDigits[(c>>28)&0xf])
+				w.writeByte(hexDigits[(c>>24)&0xf])
+			}
 			w.writeByte(hexDigits[(c>>20)&0xf])
 			w.writeByte(hexDigits[(c>>16)&0xf])
-			fallthrough
-		case 2:
-			w.writeByte(hexDigits[(c>>12)&0xf])
-			w.writeByte(hexDigits[(c>>8)&0xf])
-			w.writeByte(hexDigits[(c>>4)&0xf])
-			w.writeByte(hexDigits[c&0xf])
 		}
+		w.writeByte(hexDigits[(c>>12)&0xf])
+		w.writeByte(hexDigits[(c>>8)&0xf])
+		w.writeByte(hexDigits[(c>>4)&0xf])
+		w.writeByte(hexDigits[c&0xf])
 
 		w.writeByte('}')
 	}
