@@ -3815,6 +3815,30 @@ def test_span_unicode():
         assertIsNone(p.search('--\u00DF\u30C4\u00DF--', pos=5, endpos=6))
         assertIsNone(p.search('--\u00DF\u30C4\u00DF--', pos=6, endpos=7))
 
+def test_span_unicode_invalid():
+    inv = '\u00f9'[1] # invalid str
+
+    # the only way to create a invalid utf8 string is with slicing
+    for flag in (0, re.FALLBACK):
+        p = re.compile(r'\w+', flag)
+
+        s = '-\u00DF' + inv + '\u00DF-'
+        assertEqual(p.search(s).span(), (1, 6))
+        assertEqual(p.search(s, pos=1).span(), (1, 6))
+        assertEqual(p.search(s, pos=2).span(), (3, 6))
+        assertEqual(p.search(s, pos=2, endpos=5).span(), (3, 4))
+        assertEqual(p.search(s, pos=4, endpos=6).span(), (4, 6))
+        assertIsNone(p.search(s, pos=4, endpos=5))
+        assertEqual([m.span() for m in p.finditer(s)], [(1, 6)])
+
+        s = '-\u00DF-' + inv + '-\u00DF-'
+        assertEqual(p.search(s).span(), (1, 3))
+        assertEqual(p.search(s, pos=2).span(), (4, 5))
+        assertEqual(p.search(s, pos=4, endpos=6).span(), (4, 5))
+        assertEqual(p.search(s, pos=5, endpos=8).span(), (6, 8))
+        assertIsNone(p.search(s, pos=5, endpos=6))
+        assertEqual([m.span() for m in p.finditer(s)], [(1, 3), (4, 5), (6, 8)])
+
 def test_no_fallback():
     assertRaises(lambda: re.FALLBACK)
     assertRaises(lambda: re.compile(r'(x)(?!y)'))
@@ -4050,6 +4074,7 @@ if WITH_FALLBACK:
     test_span_ascii()
     test_span_bytes_nonascii()
     test_span_unicode()
+    test_span_unicode_invalid()
 else:
     test_no_fallback()
 
