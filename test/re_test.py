@@ -3725,6 +3725,23 @@ def test_regex_node_equals():
     assertTrue(re.match(r'(a)x|(a)y|(a)z', 'ay'))
     assertTrue(re.match(r'(?>a)x|(?>a)y|(?>a)z', 'ay'))
 
+def test_ascii_cases():
+    for flag in (0, re.FALLBACK):
+        for pattern in ['[a-z]', '[A-Z]', 'K', 'k']:
+            p = re.compile(pattern, re.IGNORECASE | flag)
+            for s in ['K', 'k', '\u212A']:
+                assertTrue(p.match(s))
+
+        for pattern in ['[a-z]', '[A-Z]', 'I', 'i']:
+            p = re.compile(pattern, re.IGNORECASE | flag)
+            for s in ['I', 'i', '\u0130', '\u0131']:
+                assertTrue(p.match(s))
+
+        for pattern in ['[a-z]', '[A-Z]', 'S', 's']:
+            p = re.compile(pattern, re.IGNORECASE | flag)
+            for s in ['S', 's', '\u017F']:
+                assertTrue(p.match(s))
+
 def test_special_pos():
     for flag in (0, re.FALLBACK):
         p = re.compile(r'\w+', flag)
@@ -3838,6 +3855,29 @@ def test_span_unicode_invalid():
         assertEqual(p.search(s, pos=5, endpos=8).span(), (6, 8))
         assertIsNone(p.search(s, pos=5, endpos=6))
         assertEqual([m.span() for m in p.finditer(s)], [(1, 3), (4, 5), (6, 8)])
+
+def test_bits_optimized():
+    inv = 'x' + '\u00f9'[1] + '\u00DF' # invalid str
+
+    # the only way to create a invalid utf8 string is with slicing
+    for flag in (0, re.FALLBACK):
+        p = re.compile(r'\w+', flag)
+
+        s = "-".join([inv for _ in range(16)]) # no optimization yet
+
+        assertEqual(p.search(s).span(), (0, 4))
+        assertEqual(p.search(s, pos=2).span(), (2, 4))
+        assertEqual(p.search(s, pos=3).span(), (5, 9))
+        assertEqual(p.search(s, pos=31).span(), (31, 34))
+        assertIsNone(p.search(s, pos=79))
+
+        s = "-".join([inv for _ in range(64)]) # with optimization
+
+        assertEqual(p.search(s).span(), (0, 4))
+        assertEqual(p.search(s, pos=2).span(), (2, 4))
+        assertEqual(p.search(s, pos=3).span(), (5, 9))
+        assertEqual(p.search(s, pos=31).span(), (31, 34))
+        assertIsNone(p.search(s, pos=319))
 
 def test_no_fallback():
     assertRaises(lambda: re.FALLBACK)
@@ -4070,11 +4110,13 @@ if WITH_FALLBACK:
     test_ascii_overlapping()
     test_ascii_subrange_letters()
     test_regex_node_equals()
+    test_ascii_cases()
     test_special_pos()
     test_span_ascii()
     test_span_bytes_nonascii()
     test_span_unicode()
     test_span_unicode_invalid()
+    test_bits_optimized()
 else:
     test_no_fallback()
 

@@ -236,13 +236,20 @@ func (p *preprocessor) defaultReplacer(w *subPatternWriter, n *regexNode, ctx *s
 
 		return true
 	case opLiteral:
-		if !ignorecase || (std && !ascii) {
+		if !ignorecase {
 			return false
 		}
 
-		// If the IGNORECASE flag is set and the pattern should be compatible with the fallback engine or the ASCII flag is set,
-		// then the preprocessor fully handles case ignoring. For the fallback engine, the preprocessor always has to handle
-		// the case ignoring since the fallback engine compares characters differently from the standard engine.
+		// If the IGNORECASE flag is set, the preprocessor needs to handle case ignoring in many cases to match
+		// the behavior from Python. The preprocessor always needs to handle case ignoring for the fallback
+		// engine since it compares characters differently compared to the standard engine (and also to Python).
+		// For the standard engine, it is only necessary if the ASCII mode is also enabled, or the literal is a
+		// folded character of 'i'.
+
+		// Check, if the literal does not need to be folded by the preprocessor.
+		if std && !(ascii || needsFoldedLiteral(n.c)) {
+			return false
+		}
 
 		// Create all cases for `n.c` by creating a folded range `c-c`.
 		r := createFoldedRanges(n.c, n.c, ascii)
@@ -260,13 +267,17 @@ func (p *preprocessor) defaultReplacer(w *subPatternWriter, n *regexNode, ctx *s
 
 		return true
 	case opRange:
-		if !ignorecase || (std && !ascii) {
+		if !ignorecase {
 			return false
 		}
 
 		// See the comment at case `opLiteral`.
 
 		p := n.params.(rangeParams)
+
+		if std && !(ascii || needsFoldedRange(p.lo, p.hi)) {
+			return false
+		}
 
 		r := createFoldedRanges(p.lo, p.hi, ascii)
 		writeRanges(w, r)
@@ -318,6 +329,33 @@ func writeRanges(w *subPatternWriter, r []rune) {
 	}
 }
 
+// needsFoldedLiteral reports, whether the preprocessor needs to handle the case folding of character `c`.
+func needsFoldedLiteral(c rune) bool {
+	switch c {
+	case 'I', 'i', '\u0130', '\u0131':
+		return true
+	default:
+		return false
+	}
+}
+
+// needsFoldedRange reports, whether the preprocessor needs to handle the case folding of range `[lo-hi]`.
+func needsFoldedRange(lo, hi rune) bool {
+	if lo <= 'I' && 'I' <= hi {
+		return true
+	}
+	if lo <= 'i' && 'i' <= hi {
+		return true
+	}
+	if lo <= '\u0130' && '\u0130' <= hi {
+		return true
+	}
+	if lo <= '\u0131' && '\u0131' <= hi {
+		return true
+	}
+	return false
+}
+
 // createFoldedRanges creates a slice of ranges, which contains all cases of the characters from `lo` to `hi`.
 // If `ascii` is set to true, this function only determines different cases of ASCII characters.
 // The resulting slice of ranges is sorted and any overlapping ranges are merged together.
@@ -357,7 +395,7 @@ func createFoldedRanges(lo, hi rune, ascii bool) []rune {
 	if ascii {
 		fold = simpleFoldASCII
 	} else {
-		fold = unicode.SimpleFold
+		fold = simpleFold
 	}
 
 	// Brute force. Depend on appendRange to coalesce ranges on the fly.
@@ -372,7 +410,24 @@ func createFoldedRanges(lo, hi rune, ascii bool) []rune {
 	return cleanClass(&r)
 }
 
-// simpleFoldASCII is the equivalent function of `unicode.SimpleFold` for ASCII characters.
+// simpleFold is the equivalent function of `unicode.SimpleFold`
+// with support for 'U+0130' and 'U+0131' for 'I' and 'i'.
+func simpleFold(c rune) rune {
+	switch c {
+	case 'I':
+		return 'i'
+	case 'i':
+		return '\u0130'
+	case '\u0130':
+		return '\u0131'
+	case '\u0131':
+		return 'I'
+	default:
+		return unicode.SimpleFold(c)
+	}
+}
+
+// simpleFoldASCII is the equivalent function of `unicode.SimpleFold` limited to ASCII characters.
 func simpleFoldASCII(c rune) rune {
 	if 'A' <= c && c <= 'Z' {
 		return c - 'A' + 'a'
