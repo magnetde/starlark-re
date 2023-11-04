@@ -3725,6 +3725,24 @@ def test_regex_node_equals():
     assertTrue(re.match(r'(a)x|(a)y|(a)z', 'ay'))
     assertTrue(re.match(r'(?>a)x|(?>a)y|(?>a)z', 'ay'))
 
+def test_special_pos():
+    for flag in (0, re.FALLBACK):
+        p = re.compile(r'\w+', flag)
+
+        assertTrue(p.search('abcd', pos=2))
+        assertIsNone(p.search('abcd', pos=2, endpos=2))
+        assertIsNone(p.search('abcd', pos=2, endpos=1))
+        assertIsNone(p.search('abcd', pos=3, endpos=1))
+
+        # the character gets removed, because pos and endpos are inside of its utf8 representation
+        assertTrue(p.search('-\u30C4-', pos=1))
+        assertIsNone(p.search('-\u30C4-', pos=2, endpos=4))
+        assertIsNone(p.search('-\u30C4-', pos=2, endpos=3))
+        assertIsNone(p.search('-\u30C4-', pos=3, endpos=4))
+        assertIsNone(p.search('-\u30C4\u30C4-', pos=2, endpos=6))
+        assertIsNone(p.search('-\u30C4\u30C4-', pos=3, endpos=5))
+        assertIsNone(p.search('-\u30C4\u30C4-', pos=4, endpos=5))
+
 def test_span_ascii():
     for flag in (0, re.FALLBACK):
         p = re.compile(r'\w+', flag)
@@ -4028,6 +4046,7 @@ if WITH_FALLBACK:
     test_ascii_overlapping()
     test_ascii_subrange_letters()
     test_regex_node_equals()
+    test_special_pos()
     test_span_ascii()
     test_span_bytes_nonascii()
     test_span_unicode()

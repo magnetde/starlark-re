@@ -324,6 +324,9 @@ func (i *stdInput) Find(pos int, longest bool, dstCap []int) ([]int, error) {
 
 	if i.bits != nil {
 		pos = i.bits.Select(pos + 1)
+		if pos < 0 {
+			return nil, nil
+		}
 	}
 
 	a := doExecute(re, nil, nil, i.str, pos, i.re.numCap, dstCap)
@@ -458,6 +461,9 @@ func (r *fallbEngine) getRuneOffsets(s string, endpos int) ([]rune, *util.BitArr
 func (i *fallbInput) Find(pos int, _ bool, dstCap []int) ([]int, error) {
 	if i.bits != nil {
 		pos = i.bits.Rank(pos - 1)
+	}
+	if pos > len(i.chars) {
+		return nil, nil
 	}
 
 	m, err := i.re.re.FindRunesMatchStartingAt(i.chars, pos)
