@@ -1,4 +1,4 @@
-# starlark-re
+# Starlark-re
 
 Starlark-re is an implementation of Python's [re](https://docs.python.org/3/library/re.html)
 module for [Starlark](https://github.com/google/starlark-go).
