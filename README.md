@@ -95,7 +95,7 @@ pattern so flags such as `re.UNICODE`, `re.IGNORECASE` or `re.ASCII` work exactl
 
 In case that the regex pattern includes unsupported elements, the regex engine [regexp2.Regexp](https://pkg.go.dev/github.com/dlclark/regexp2),
 that supports all of these elements except for possessive repeat, is used instead.
-However, it should be noted that the using ´regexp2´ may result in higher runtimes,
+However, it should be noted that the using `regexp2` may result in higher runtimes,
 so this engine is only used as a fallback when dealing with regex patterns that contain unsupported elements.
 Compiled patterns are stored in an LRU cache.
 
