@@ -86,6 +86,13 @@ func runTests(t *testing.T, re *re.Module, withCache, fallbackEnabled bool) erro
 		Print: func(_ *starlark.Thread, msg string) {
 			t.Log(msg)
 		},
+		Load: func(_ *starlark.Thread, module string) (starlark.StringDict, error) {
+			if module == "re.star" {
+				return re.Members(), nil
+			}
+
+			return nil, errors.New("unknown module")
+		},
 	}
 
 	_, err = prog.Init(thread, predeclared)

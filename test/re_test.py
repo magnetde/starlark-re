@@ -3130,6 +3130,17 @@ def test_invalid_args_match():
     assertRaises(lambda: m.span(None))
     assertRaises(lambda: m.span(none=None))
 
+load("re.star", re_compile="compile", re_match="match") # type: ignore
+re_compile = re_compile # type: ignore
+re_match = re_match # type: ignore
+
+def test_re_load():
+    p = re_compile(r'x')
+    assertTrue(p.match('xyz'))
+    assertEqual(p.match('xyz').span(), (0, 1))
+    assertTrue(re_match(r'x', 'xyz'))
+    assertEqual(re_match(r'x', 'xyz').span(), (0, 1))
+    
 def test_pattern_members():
     p = re.compile(r'(?P<num>\d+)-(?P<outer>(?P<word>\w+))', re.IGNORECASE | re.ASCII)
 
@@ -4090,6 +4101,7 @@ if WITH_FALLBACK:
     test_invalid_args()
     test_invalid_args_pattern()
     test_invalid_args_match()
+    test_re_load()
     test_pattern_members()
     test_match_nogroups()
     test_match_groups()

@@ -220,6 +220,22 @@ func (m *Module) Attr(name string) (starlark.Value, error) {
 // AttrNames lists available dot expression members.
 func (m *Module) AttrNames() []string { return m.members.Keys() }
 
+// Members returns a dictionary containing all members of this module.
+// This function may be useful when needing a dictionary of available members inside a `Load()` function.
+// Note that all members of type `*Builtin` are already bound to this module, making them safe to call.
+func (m *Module) Members() starlark.StringDict {
+	members := make(starlark.StringDict, len(m.members))
+	for k, v := range m.members {
+		if b, ok := v.(*starlark.Builtin); ok {
+			v = b.BindReceiver(m)
+		}
+
+		members[k] = v
+	}
+
+	return members
+}
+
 // compile compiles a regex pattern.
 // If the pattern cache is disabled, the regex pattern is compiled as normal.
 // Otherwise, the pattern is compiled by using the cache (see `cachedCompile`).
