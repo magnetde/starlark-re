@@ -229,8 +229,7 @@ func (b *BitArray) selectBlocks(i uint, pos uint) uint {
 
 		i -= ones
 
-		pos++
-		if pos > numblocks {
+		if pos++; pos > numblocks {
 			return b.len
 		}
 	}

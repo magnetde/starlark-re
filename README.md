@@ -90,8 +90,8 @@ These unsupported elements include:
 
 If the regular expression pattern does not include any unsupported elements, it is preprocessed and
 then compiled with the default regex engine.
-The preprocessor will make necessary modifications to literals, ranges and character classes in the
-pattern so flags such as `re.UNICODE`, `re.IGNORECASE` or `re.ASCII` work exactly like expected.
+The preprocessor will make necessary modifications to literals, ranges and character classes in the pattern so matching
+with bytes or using flags such as `re.UNICODE`, `re.IGNORECASE` or `re.ASCII` works exactly like expected.
 
 In case that the regex pattern includes unsupported elements, the regex engine [regexp2.Regexp](https://pkg.go.dev/github.com/dlclark/regexp2),
 that supports all of these elements except for possessive repeat, is used instead.
@@ -109,6 +109,6 @@ Currently, there are some differences to the Python re module:
 - The `re.LOCALE` flag has no effect.
 - Positions are given as byte offsets instead of character offsets (which is the default for Go and Starlark).
 - The fallback engine does not support the longest match search, so some matches starting at the same position may be not found.
-  This may result in differing outcomes compared to Python, especially at the `fullmatch` function.
+  This may result in different outcomes compared to Python, especially for the `fullmatch` function.
 - The default regex engine does not match `\b` at unicode word boundaries, while the fallback engine does.
 - There is no support for possessive repetion operators and `Pattern.scanner`.
