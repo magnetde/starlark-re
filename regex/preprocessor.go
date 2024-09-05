@@ -358,101 +358,6 @@ func inRange(lo, hi, c rune) bool {
 	return lo <= c && c <= hi
 }
 
-// createFoldedRanges creates a slice of ranges, which contains all cases of the characters from `lo` to `hi`.
-// If `ascii` is set to true, this function only determines different cases of ASCII characters.
-// The resulting slice of ranges is sorted and any overlapping ranges are merged together.
-// See also `appendFoldedRange` of package `regexp/syntax`.
-func createFoldedRanges(lo, hi rune, ascii bool) []rune {
-	var r []rune
-
-	var maxFold rune
-	if ascii {
-		maxFold = maxFoldASCII
-	} else {
-		maxFold = maxFoldUnicode
-	}
-
-	// Optimizations.
-	if lo <= minFold && hi >= maxFold {
-		// Range is full: folding can't add more.
-		return appendRange(r, lo, hi)
-	}
-	if hi < minFold || lo > maxFold {
-		// Range is outside folding possibilities.
-		return appendRange(r, lo, hi)
-	}
-	if lo < minFold {
-		// [lo, minFold-1] needs no folding.
-		r = appendRange(r, lo, minFold-1)
-		lo = minFold
-	}
-	if hi > maxFold {
-		// [maxFold+1, hi] needs no folding.
-		r = appendRange(r, maxFold+1, hi)
-		hi = maxFold
-	}
-
-	// Determine the folding function.
-	var fold func(c rune) rune
-	if ascii {
-		fold = simpleFoldASCII
-	} else {
-		fold = simpleFold
-	}
-
-	// Brute force. Depend on appendRange to coalesce ranges on the fly.
-	for c := lo; c <= hi; c++ {
-		r = appendRange(r, c, c)
-		for f := fold(c); f != c; f = fold(f) {
-			r = appendRange(r, f, f)
-		}
-	}
-
-	// Sort and simplify ranges.
-	return cleanClass(&r)
-}
-
-// simpleFold is the equivalent function of `unicode.SimpleFold`
-// with support for 'U+0130' and 'U+0131' for 'I' and 'i'
-// and for 'U+FB05' and 'U+FB06'
-func simpleFold(c rune) rune {
-	switch c {
-	case 'I':
-		return 'i'
-	case 'i':
-		return '\u0130'
-	case '\u0130':
-		return '\u0131'
-	case '\u0131':
-		return 'I'
-	case '\ufb05':
-		return '\ufb06'
-	case '\ufb06':
-		return '\ufb05'
-	default:
-		return unicode.SimpleFold(c)
-	}
-}
-
-// simpleFoldASCII is the equivalent function of `unicode.SimpleFold` limited to ASCII characters.
-func simpleFoldASCII(c rune) rune {
-	if inRange('A', 'Z', c) {
-		return c - 'A' + 'a'
-	} else if inRange('a', 'z', c) {
-		return c - 'a' + 'A'
-	} else {
-		return c
-	}
-}
-
-// Link function from package `regexp/syntax` instead of copy and paste them:
-
-//go:linkname appendRange regexp/syntax.appendRange
-func appendRange(r []rune, lo, hi rune) []rune
-
-//go:linkname cleanClass regexp/syntax.cleanClass
-func cleanClass(rp *[]rune) []rune
-
 // fallbackPattern builds a preprocessed regex pattern compatible with the `regexp2.Regexp`.
 // This pattern is almost identical to the one produced by `stdPattern`, with the exception of not
 // using any unicode classes (`\p{...}`) and not naming any captured groups to preserve their order.
@@ -472,7 +377,7 @@ func (p *preprocessor) fallbackPattern() string {
 		}
 
 		if n.opcode == opSubpattern {
-			// The preprocessor must only write subpatterns differently,
+			// The preprocessor only needs to write subpatterns differently,
 			// that have a group number.
 
 			p := n.params.(subPatternParam)

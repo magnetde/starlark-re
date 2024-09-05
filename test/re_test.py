@@ -1694,6 +1694,7 @@ def test_possible_set_operations():
     assertEqual(re.findall(r'[%--]', s), list("%&'()*+,-".elems()))
 
     assertEqual(re.findall(r'[0-9&&1]', s), list('&0123456789'.elems()))
+    assertEqual(re.findall(r'[0-8&&1]', s), list('&012345678'.elems()))
     assertEqual(re.findall(r'[\d&&1]', s), list('&0123456789'.elems()))
     assertEqual(re.findall(r'[&&1]', s), list('&1'.elems()))
 
@@ -1706,6 +1707,7 @@ def test_possible_set_operations():
     assertEqual(re.findall(r'[~~1]', s), list('1~'.elems()))
 
     assertEqual(re.findall(r'[[0-9]|]', s), list('0123456789[]'.elems()))
+    assertEqual(re.findall(r'[[0-8]|]', s), list('012345678[]'.elems()))
 
     assertEqual(re.findall(r'[[:digit:]|]', s), list(':[]dgit'.elems()))
 
@@ -2350,8 +2352,8 @@ def test_zerowidth():
     # Issues 852532, 1647489, 3262, 25054.
     assertEqual(re.split(r"\b", "a::bc"), ['', 'a', '::', 'bc', ''])
     assertEqual(re.split(r"\b|:+", "a::bc"), ['', 'a', '', '', 'bc', ''])
+    assertEqual(re.split(r"(?<!\w)(?=\w)|:+", "a::bc"), ['', 'a', '', 'bc'])
     # SKIP because regexp2 does not support longest match search:
-    # assertEqual(re.split(r"(?<!\w)(?=\w)|:+", "a::bc"), ['', 'a', '', 'bc'])
     # assertEqual(re.split(r"(?<=\w)(?!\w)|:+", "a::bc"), ['a', '', 'bc', ''])
 
     assertEqual(re.sub(r"\b", "-", "a::bc"), '-a-::-bc-')
@@ -2759,7 +2761,7 @@ def test_bug_gh100061():
     assertEqual(re.match('(?>(?:.(?!D))?)', 'CDE').span(), (0, 0))
     # SKIP: assertEqual(re.match('(?:.(?!D))?+', 'CDE').span(), (0, 0))
     assertEqual(re.match('(?>(?:.(?!D)){1,3})', 'ABCDE').span(), (0, 2))
-    # SKIP: aassertEqual(re.match('(?:.(?!D)){1,3}+', 'ABCDE').span(), (0, 2))
+    # SKIP: assertEqual(re.match('(?:.(?!D)){1,3}+', 'ABCDE').span(), (0, 2))
     # gh-106052
     assertEqual(re.match("(?>(?:ab?c)+)", "aca").span(), (0, 2))
     # SKIP: assertEqual(re.match("(?:ab?c)++", "aca").span(), (0, 2))
@@ -2768,10 +2770,26 @@ def test_bug_gh100061():
     assertEqual(re.match("(?>(?:ab?c)?)", "a").span(), (0, 0))
     # SKIP: assertEqual(re.match("(?:ab?c)?+", "a").span(), (0, 0))
     assertEqual(re.match("(?>(?:ab?c){1,3})", "aca").span(), (0, 2))
-    # assertEqual(re.match("(?:ab?c){1,3}+", "aca").span(), (0, 2))
+    # SKIP: assertEqual(re.match("(?:ab?c){1,3}+", "aca").span(), (0, 2))
 
 def test_fail():
     assertEqual(re.search(r'12(?!)|3', '123')[0], '3')
+
+def test_character_set_any():
+    # The union of complementary character sets mathes any character
+    # and is equivalent to "(?s:.)".
+    s = '1x\n'
+    for p in (r'[\s\S]', r'[\d\D]', r'[\w\W]', r'[\S\s]', r'\s|\S'):
+        assertEqual(re.findall(p, s), list(s.codepoints()))
+        assertEqual(re.fullmatch('(?:' + p + ')+', s).group(), s)
+
+def test_character_set_none():
+    # Negation of the union of complementary character sets does not match
+    # any character.
+    s = '1x\n'
+    for p in (r'[^\s\S]', r'[^\d\D]', r'[^\w\W]', r'[^\S\s]'):
+        assertIsNone(re.search(p, s))
+        assertIsNone(re.search('(?s:.)' + p, s))
 
 def get_debug_out(pat):
     return capture_output(lambda: re.compile(pat, re.DEBUG))[1]
@@ -2879,6 +2897,16 @@ def test_flags_repr():
     assertEqual(repr(~(re.I|re.S|re.X)), "-83")
     assertEqual(repr(~(re.I|re.S|re.X|(1<<20))), "-1048659")
 
+
+def test_immutable():
+    # bpo-43908: check that re types are immutable
+    def cb1():
+        re.Match.foo = 1
+    assertRaises(cb1)
+    def cb2():
+        re.Pattern.foo = 1
+    assertRaises(cb2)
+
 def test_repeat_minmax_overflow_maxrepeat():
     # MAXREPEAT provided as a global variable
     string = "x" * 100000
@@ -2959,8 +2987,7 @@ def test_re_tests():
             if e != None:
                 gi = "Error"
             vardict[i] = gi
-        assertEqual(eval(repl, vardict), expected,
-                            'grouping error')
+        assertEqual(eval(repl, vardict), expected, 'grouping error')
 
         # Try the match with both pattern and string converted to
         # bytes, and check that it still succeeds.
@@ -2975,8 +3002,7 @@ def test_re_tests():
         # of the match and see if it still succeeds.  \B will
         # break (because it won't match at the end or start of a
         # string), so we'll ignore patterns that feature it.
-        if (pattern[:2] != r'\B' and pattern[-2:] != r'\B'
-                    and result != None):
+        if (pattern[:2] != r'\B' and pattern[-2:] != r'\B' and result != None):
             obj = re.compile(pattern)
             assertTrue(obj.search(s, start, end + 1))
 
@@ -4081,6 +4107,8 @@ if WITH_FALLBACK:
     test_debug_flag()
     test_atomic_group()
     test_fail()
+    test_character_set_any()
+    test_character_set_none()
     test_without_flags()
     test_single_flag()
     test_multiple_flags()
@@ -4092,6 +4120,7 @@ if WITH_FALLBACK:
     test_quotes()
     test_long_pattern()
     test_flags_repr()
+    test_immutable()
     test_repeat_minmax_overflow_maxrepeat()
     test_re_benchmarks()
     test_re_tests()
