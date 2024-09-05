@@ -236,6 +236,21 @@ func (m *Module) Members() starlark.StringDict {
 	return members
 }
 
+// Purge clears the regex cache.
+func (m *Module) Purge() {
+	if m.enableCache {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+
+		m.list.Init()
+
+		// clear(m.cache)
+		for k := range m.cache {
+			delete(m.cache, k)
+		}
+	}
+}
+
 // compile compiles a regex pattern.
 // If the pattern cache is disabled, the regex pattern is compiled as normal.
 // Otherwise, the pattern is compiled by using the cache (see `cachedCompile`).
@@ -295,21 +310,6 @@ func (m *Module) cachedCompile(thread *starlark.Thread, pattern strOrBytes, flag
 	}
 
 	return p, nil
-}
-
-// purge clears the regex cache.
-func (m *Module) purge() {
-	if m.enableCache {
-		m.mu.Lock()
-		defer m.mu.Unlock()
-
-		m.list.Init()
-
-		// clear(m.cache)
-		for k := range m.cache {
-			delete(m.cache, k)
-		}
-	}
 }
 
 // Function naming
@@ -448,7 +448,7 @@ func rePurge(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwarg
 	}
 
 	m := b.Receiver().(*Module)
-	m.purge()
+	m.Purge()
 
 	return starlark.None, nil
 }
