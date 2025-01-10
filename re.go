@@ -260,15 +260,15 @@ func (m *Module) compile(thread *starlark.Thread, pattern strOrBytes, flags uint
 		return p, err
 	}
 
-	return m.cachedCompile(thread, pattern, flags)
+	return m.compileCached(thread, pattern, flags)
 }
 
-// cachedCompile compiles a regex pattern by using the cache.
+// compileCached compiles a regex pattern by using the cache.
 // If the pattern already exists in the cache, the compiled pattern is returned.
 // Otherwise, the compiled pattern is compiled an then added to the cache.
 // When the cache exceeds `m.maxCacheSize`, the oldest entry is removed.
 // Do not call this function directly. Use `regexCompile` or `Module.compile` instead.
-func (m *Module) cachedCompile(thread *starlark.Thread, pattern strOrBytes, flags uint32) (*Pattern, error) {
+func (m *Module) compileCached(thread *starlark.Thread, pattern strOrBytes, flags uint32) (*Pattern, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
