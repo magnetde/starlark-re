@@ -677,7 +677,11 @@ func regexFindall(p *Pattern, str strOrBytes, pos, endpos int) (starlark.Value, 
 		case 2:
 			// Match contains one group; element is this group.
 
-			v = p.pattern.asType(s[match[2]:match[3]])
+			if match[2] >= 0 {
+				v = p.pattern.asType(s[match[2]:match[3]])
+			} else {
+				v = p.pattern.asType("")
+			}
 		default:
 			// Match contains multiple groups; element is a tuple of groups.
 
