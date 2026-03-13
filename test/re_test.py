@@ -3983,6 +3983,9 @@ def test_no_cache():
     re.purge() # should have no effect
     assertIsNot(p, re.compile(s))
 
+def test_findall_empty_single_group_match():
+    s = r'a:b'
+    assertEqual(re.findall(r"a:(:)?b", s), [""])
 
 # Run all tests:
 
@@ -4164,6 +4167,7 @@ if WITH_FALLBACK:
     test_span_unicode()
     test_span_unicode_invalid()
     test_bits_optimized()
+    test_findall_empty_single_group_match()
 else:
     test_no_fallback()
 
