@@ -3922,6 +3922,10 @@ def test_bits_optimized():
         assertEqual(p.search(s, pos=31).span(), (31, 34))
         assertIsNone(p.search(s, pos=319))
 
+def test_findall_empty_single_group_match():
+    s = r'a:b'
+    assertEqual(re.findall(r"a:(:)?b", s), [""])
+
 def test_no_fallback():
     assertRaises(lambda: re.FALLBACK)
     assertRaises(lambda: re.compile(r'(x)(?!y)'))
@@ -3982,10 +3986,6 @@ def test_no_cache():
     assertIsNot(p, re.compile(s))
     re.purge() # should have no effect
     assertIsNot(p, re.compile(s))
-
-def test_findall_empty_single_group_match():
-    s = r'a:b'
-    assertEqual(re.findall(r"a:(:)?b", s), [""])
 
 # Run all tests:
 

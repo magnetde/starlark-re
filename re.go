@@ -100,7 +100,6 @@ type Module struct {
 	mu    sync.Mutex                 // mutex for the regex cache
 	list  *list.List                 // least recent used regexes
 	cache map[cacheKey]*list.Element // mapping of patterns to list elements
-
 }
 
 // cacheKey is the type, that is used for keys of the cache map, containing the pattern,
